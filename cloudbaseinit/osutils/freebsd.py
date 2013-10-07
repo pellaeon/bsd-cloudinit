@@ -15,10 +15,8 @@ class FreeBSDUtils(base.BaseOSUtils):
 
     # not completed
     def create_user(self, username, password, password_expires=False):
-        try:
-            subprocess.check_output(["adduser", "-w", "yes", "-s", "tcsh"])
-        except CalledProcessError:
-            raise Exception(CalledProcessError.output)
+        pw_cmd="echo %s | pw useradd -n %s -c 'Created by bsdcloud-init' -d '/home/%s' -s /bin/tcsh -h 0" % (password, username, username)
+        subprocess.check_call(pw_cmd, shell=True)
 
     def set_host_name(self, new_host_name):
         try:
