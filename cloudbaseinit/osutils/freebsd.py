@@ -14,8 +14,19 @@ class FreeBSDUtils(base.BaseOSUtils):
         return True
 
     # not completed
-    def create_user(self, username, password, password_expires=False):
-        pw_cmd="echo %s | pw useradd -n %s -c 'Created by bsdcloud-init' -d '/home/%s' -s /bin/tcsh -h 0" % (password, username, username)
+    def create_user(self, username, password, invite_group, password_expires=False):
+        """
+            invite_group must be a list of string.
+        """
+        assert isinstance(invite_group, list), "invite_group must be a list."
+        assert invite_group, "invite_group cannot be empty."
+        grouplist = ''
+        for i in invite_group:
+            grouplist += i+','
+        grouplist = grouplist[:-1]
+
+        pw_cmd="echo %s | pw useradd -n %s -c 'Created by bsdcloud-init' -d '/home/%s' -s /bin/tcsh -h 0 -G %s" % \
+                (password, username, username, grouplist)
         subprocess.check_call(pw_cmd, shell=True)
 
     def set_host_name(self, new_host_name):
