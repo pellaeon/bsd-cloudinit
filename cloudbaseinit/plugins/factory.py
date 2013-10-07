@@ -21,14 +21,14 @@ opts = [
     cfg.ListOpt(
         'plugins',
         default=[
-        'cloudbaseinit.plugins.freebsd.sethostname.SetHostNamePlugin',
-        'cloudbaseinit.plugins.freebsd.createuser.CreateUserPlugin',
-        'cloudbaseinit.plugins.freebsd.networkconfig.NetworkConfigPlugin',
-        'cloudbaseinit.plugins.freebsd.sshpublickeys.'
+        'cloudbaseinit.plugins.windows.sethostname.SetHostNamePlugin',
+        'cloudbaseinit.plugins.windows.createuser.CreateUserPlugin',
+        'cloudbaseinit.plugins.windows.networkconfig.NetworkConfigPlugin',
+        'cloudbaseinit.plugins.windows.sshpublickeys.'
         'SetUserSSHPublicKeysPlugin',
-        'cloudbaseinit.plugins.freebsd.extendvolumes.ExtendVolumesPlugin',
-        'cloudbaseinit.plugins.freebsd.userdata.UserDataPlugin',
-        'cloudbaseinit.plugins.freebsd.setuserpassword.SetUserPasswordPlugin',
+        'cloudbaseinit.plugins.windows.extendvolumes.ExtendVolumesPlugin',
+        'cloudbaseinit.plugins.windows.userdata.UserDataPlugin',
+        'cloudbaseinit.plugins.windows.setuserpassword.SetUserPasswordPlugin',
         ],
         help='List of enabled plugin classes, '
         'to executed in the provided order'),
