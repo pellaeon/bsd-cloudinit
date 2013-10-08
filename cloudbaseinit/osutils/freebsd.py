@@ -54,7 +54,8 @@ class FreeBSDUtils(base.BaseOSUtils):
         pass
 
     def get_user_home(self, username):
-        pass
+        home_dir = subprocess.check_output('printf ~' + username, shell=True)
+        return home_dir
 
     def get_network_adapters(self):
         """
