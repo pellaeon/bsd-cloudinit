@@ -57,7 +57,11 @@ class FreeBSDUtils(base.BaseOSUtils):
         pass
 
     def get_network_adapters(self):
-        pass
+        """
+        This fucntion will return a list of interface.
+        """
+        if_list = subprocess.check_output(['ifconfig', '-l']).split(' ')
+        return if_list
 
     def set_static_network_config(self, adapter_name, address, netmask,
                                   broadcast, gateway, dnsdomain,
