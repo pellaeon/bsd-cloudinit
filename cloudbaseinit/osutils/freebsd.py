@@ -46,8 +46,9 @@ class FreeBSDUtils(base.BaseOSUtils):
     def sanitize_shell_input(self, value):
         pass
 
-    def set_user_password(self, username, password, password_expires=False):
-        pass
+    def set_user_password(self, username, password):
+        pw_cmd = "echo " + password + " | pw usermod -n " + username + " -h 0"
+        subprocess.check_call(pw_cmd, shell=True)
 
     def add_user_to_local_group(self, username, groupname):
         pass
