@@ -18,16 +18,21 @@ class FreeBSDUtils(base.BaseOSUtils):
         """
             invite_group must be a list of string.
         """
+        home_dir = '/home/' + username
+        user_shell = '/bin/tcsh'
+        user_comment = 'Created by bsdcloud-init'
+        grouplist = ''
+
         assert isinstance(invite_group, list), "invite_group must be a list."
         assert invite_group, "invite_group cannot be empty."
-        grouplist = ''
         for i in invite_group:
             grouplist += i+','
         grouplist = grouplist[:-1]
 
-        pw_cmd="echo %s | pw useradd -n %s -c 'Created by bsdcloud-init' -d '/home/%s' -s /bin/tcsh -h 0 -G %s" % \
-                (password, username, username, grouplist)
+        pw_cmd = "echo " + password + " | pw useradd -n " + username + " -c '" + user_comment + "' -d '" + user_shell + "' -s /bin/tcsh -h 0 -G " + grouplist
         subprocess.check_call(pw_cmd, shell=True)
+        subprocess.check_call("mkdir %s" % (home_dir), shell=True)
+        subprocess.check_call("chown -R %s:%s %s" % (username, username, home_dir), shell=True)
 
     def set_host_name(self, new_host_name):
         try:
