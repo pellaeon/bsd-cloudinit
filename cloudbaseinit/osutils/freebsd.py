@@ -62,6 +62,8 @@ class FreeBSDUtils(base.BaseOSUtils):
         This fucntion will return a list of interface.
         """
         if_list = subprocess.check_output(['ifconfig', '-l']).split(' ')
+        # Filter out non-network interfaces
+        if_list = filter(lamda x: x.startswith(('pflog', 'lo', 'plip')), if_list)
         return if_list
 
     def set_static_network_config(self, adapter_name, address, netmask,
