@@ -89,6 +89,9 @@ class FreeBSDUtils(base.BaseOSUtils):
         self._add_comment(resolv_conf_file);
         for line in resolv_conf:
             resolv_conf_file.write(line + '\n')
+        self._add_rc_conf({'ifconfig_' + adapter_name: 'inet ' + address + ' netmask ' + netmask + ' broadcast ' + broadcast,
+                           'defaultrouter': gateway})
+        
         resolv_conf_file.close()
 
     def set_config_value(self, name, value, section=None):
