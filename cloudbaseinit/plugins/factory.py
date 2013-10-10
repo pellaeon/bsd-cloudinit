@@ -25,7 +25,7 @@ opts = [
         'cloudbaseinit.plugins.freebsd.createuser.CreateUserPlugin',
         'cloudbaseinit.plugins.freebsd.networkconfig.NetworkConfigPlugin',
         'cloudbaseinit.plugins.freebsd.sshpublickeys.'
-        'SetUserSSHPublicKeysPlugin',
+        'SetUserSSHPublicKeysPlugin'
         #'cloudbaseinit.plugins.freebsd.extendvolumes.ExtendVolumesPlugin',
         #'cloudbaseinit.plugins.freebsd.userdata.UserDataPlugin',
         #'cloudbaseinit.plugins.freebsd.setuserpassword.SetUserPasswordPlugin',
