@@ -89,6 +89,14 @@ class FreeBSDUtils(base.BaseOSUtils):
         
         resolv_conf_file.close()
 
+    def set_dhcp_network_config(self, adapter_name):
+        if_list = self.get_network_adapters()
+        assert adapter_name in if_list, 'Network interface: ' + adapter_name + ' not found.'
+        
+        _add_rc_conf({'ifconfig_' + adapter_name: 'DHCP'})
+        subprocess.check_call(['dhclient', adapter_name])
+
+
     def set_config_value(self, name, value, section=None):
         pass
 
