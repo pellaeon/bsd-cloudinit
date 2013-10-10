@@ -36,13 +36,8 @@ class FreeBSDUtils(base.BaseOSUtils):
         subprocess.check_call("chown -R %s:%s %s" % (username, username, home_dir), shell=True)
 
     def set_host_name(self, new_host_name):
-        try:
-            subprocess.check_output(["hostname", new_host_name])
-            cmd_newhost = "[ -z `egrep '^hostname' /etc/rc.conf` ] && { echo 'hostname=\"%s\"' >> /etc/rc.conf } || { sed -e 's/^hostname=.*$/hostname=\"%s\"/' -I '' /etc/rc.conf }" % (new_host_name, new_host_name)
-            subprocess.check_output(cmd_newhost, shell=True)
-            return False
-        except CalledProcessError:
-            raise Exception(CalledProcessError.output)
+        subprocess.check_call(['hostname', new_host_name])
+        self._add_rc_conf({'hostname': new_host_name})
 
     def sanitize_shell_input(self, value):
         pass
