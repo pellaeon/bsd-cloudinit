@@ -131,6 +131,7 @@ class FreeBSDUtils(base.BaseOSUtils):
             e.g. {'hostname': 'example',
                    'sshd_enable': 'YES'}
         """
+        assert isinstance(options, dict), 'param options must be a dictionary.'
         rc_conf_file = open('/etc/rc.conf', 'a')
         
         self._add_comment(rc_conf_file)
