@@ -144,6 +144,6 @@ class FreeBSDUtils(base.BaseOSUtils):
         
         self._add_comment(rc_conf_file)
         for key in options:
-            rc_conf_file.write(key + '="' + options[key] '"\n')
+            rc_conf_file.write(key + '="' + options[key] + '"\n')
         
         rc_conf_file.close()
