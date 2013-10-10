@@ -47,7 +47,8 @@ class FreeBSDUtils(base.BaseOSUtils):
         subprocess.check_call(pw_cmd, shell=True)
 
     def add_user_to_local_group(self, username, groupname):
-        pass
+        pw_cmd = 'pw usermod ' + username + ' -G ' + groupname
+        subprocess.check_call(pw_cmd, shell=True)
 
     def get_user_home(self, username):
         home_dir = subprocess.check_output('printf ~' + username, shell=True)
@@ -95,7 +96,6 @@ class FreeBSDUtils(base.BaseOSUtils):
         
         _add_rc_conf({'ifconfig_' + adapter_name: 'DHCP'})
         subprocess.check_call(['dhclient', adapter_name])
-
 
     def set_config_value(self, name, value, section=None):
         pass
