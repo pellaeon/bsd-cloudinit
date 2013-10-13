@@ -19,4 +19,4 @@ from cloudbaseinit.utils import classloader
 class OSUtilsFactory(object):
     def get_os_utils(self):
         cl = classloader.ClassLoader()
-        return cl.load_class(cloudbaseinit.osutils.freebsd.FreeBSDUtils)()
+        return cl.load_class('cloudbaseinit.osutils.freebsd.FreeBSDUtils')()
