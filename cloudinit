@@ -28,5 +28,20 @@ plugins = plugins_factory.PluginFactory().load_plugins()
 
 # running each plugins ?
 for plugin in plugins:
+
+    print '='*20
+
     print plugin
-    print plugin.get_name(), plugin.get_os_requirements()
+
+    print plugin.get_name()
+    plugin_name = plugin.get_name()
+
+    print plugin.get_os_requirements()
+
+    print osutils.get_config_value(plugin_name,'Plugins')
+
+    try:
+        print plugin.execute(service)
+    except:
+        print 'fail Q_Qa'
+

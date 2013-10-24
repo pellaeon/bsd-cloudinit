@@ -1,4 +1,6 @@
 from cloudbaseinit.osutils import base
+
+from subprocess import CalledProcessError
 import subprocess
 import datetime
 
