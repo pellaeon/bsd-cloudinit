@@ -43,6 +43,9 @@ class HttpService(base.BaseMetadataService):
         '''
         Workaround for: https://bugs.launchpad.net/quantum/+bug/1174657
         '''
+        # since below code is for M$ only, pass them temporary
+        return 
+
         osutils = osutils_factory.OSUtilsFactory().get_os_utils()
 
         os_major_version = int(osutils.get_os_version().split('.')[0])
