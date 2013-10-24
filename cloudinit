@@ -19,10 +19,9 @@ service = mdsf.get_metadata_service()
 LOG.info('Metadata service loaded: \'%s\'' % service.get_name())
 
 # test get meta data
-#from pprint import pprint
-#pprint('get name =>', service.get_name())
-#pprint('get user data =>', service.get_user_data('openstack'))
-#pprint('get meta data =>', service.get_meta_data('openstack'))
+print('get name =>', service.get_name())
+#print('get user data =>', service.get_user_data('openstack'))
+print('get meta data =>', service.get_meta_data('openstack'))
 
 # load plugins
 plugins = plugins_factory.PluginFactory().load_plugins()
