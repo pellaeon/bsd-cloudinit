@@ -1,3 +1,7 @@
+from cloudbaseinit.osutils import factory as osutils_factory
+from cloudbaseinit.plugins import base
+from cloudbaseinit.openstack.common import log as logging
+
 import subprocess
 
 LOG = logging.getLogger(__name__)
