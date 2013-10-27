@@ -10,8 +10,12 @@ from cloudbaseinit.plugins import factory as plugins_factory
 
 LOG = logging.getLogger(__name__)
 
+def log_to_tmpfile (msg, FILE='/tmp/cloudinit.log'):
+    print(msg)
+    with open(FILE,'a') as f: f.write(msg+'\n')
+
 osutils = osutils_factory.OSUtilsFactory().get_os_utils()
-print osutils
+log_to_tmpfile("{}".format(osutils))
 
 # choose meta data service "httpservice"
 mdsf = metadata_factory.MetadataServiceFactory()
@@ -19,9 +23,9 @@ service = mdsf.get_metadata_service()
 LOG.info('Metadata service loaded: \'%s\'' % service.get_name())
 
 # test get meta data
-print('get name =>', service.get_name())
-#print('get user data =>', service.get_user_data('openstack'))
-print('get meta data =>', service.get_meta_data('openstack'))
+log_to_tmpfile('get name =>', service.get_name())
+#log_to_tmpfile('get user data =>', service.get_user_data('openstack'))
+log_to_tmpfile('get meta data => {}'.format(service.get_meta_data('openstack')))
 
 # load plugins
 plugins = plugins_factory.PluginFactory().load_plugins()
@@ -29,19 +33,22 @@ plugins = plugins_factory.PluginFactory().load_plugins()
 # running each plugins ?
 for plugin in plugins:
 
-    print '='*20
+    log_to_tmpfile('='*20)
 
-    print plugin
+    log_to_tmpfile("plugin => {}".format(plugin))
 
-    print plugin.get_name()
     plugin_name = plugin.get_name()
+    log_to_tmpfile("plugin name => {}".format(plugin_name))
 
-    print plugin.get_os_requirements()
+    plugin_get_os_requirements = plugin.get_os_requirements()
+    log_to_tmpfile("plugin os requirements => {}".format(plugin_get_os_requirements))
 
-    print osutils.get_config_value(plugin_name,'Plugins')
+    plugin_config_value = osutils.get_config_value(plugin_name,'Plugins')
+    log_to_tmpfile("plugin config value => {}".format(plugin_config_value))
 
     try:
-        print plugin.execute(service)
+        log_to_tmpfile("{}".format(plugin.execute(service)))
+        log_to_tmpfile('execute success ^_^')
     except:
-        print 'fail Q_Qa'
+        log_to_tmpfile('execute fail Q_Q')
 
