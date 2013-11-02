@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>bsd-cloudinit by pellaeon</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1 class="header">bsd-cloudinit</h1>
+        <p class="header">cloud-init scripts for BSD</p>
+
+        <ul>
+          <li class="download"><a class="buttons" href="https://github.com/pellaeon/bsd-cloudinit/zipball/master">Download ZIP</a></li>
+          <li class="download"><a class="buttons" href="https://github.com/pellaeon/bsd-cloudinit/tarball/master">Download TAR</a></li>
+          <li><a class="buttons github" href="https://github.com/pellaeon/bsd-cloudinit">View On GitHub</a></li>
+        </ul>
+
+        <p class="header">This project is maintained by <a class="header name" href="https://github.com/pellaeon">pellaeon</a></p>
+
+
+      </header>
+      <section>
+        <h2>
+<a name="bsd-cloudinit" class="anchor" href="#bsd-cloudinit"><span class="octicon octicon-link"></span></a>bsd-cloudinit</h2>
+
+<p>bsd-cloudinit is a Python script based on <a href="https://github.com/cloudbase/cloudbase-init/">cloudbase-init</a> that do various tasks to prepare the FreeBSD instance for cloud environment.</p>
+
+<h2>
+<a name="building-a-freebsd-vm-image-for-openstack" class="anchor" href="#building-a-freebsd-vm-image-for-openstack"><span class="octicon octicon-link"></span></a>Building a FreeBSD VM image for OpenStack</h2>
+
+<p>bsd-cloudinit-installer is the VM image maker, it transforms a VM into a OpenStack VM image.</p>
+
+<h3>
+<a name="installing-freebsd-via-virt-manager" class="anchor" href="#installing-freebsd-via-virt-manager"><span class="octicon octicon-link"></span></a>Installing FreeBSD via virt-manager</h3>
+
+<p>First you'll have to install a normal VM via virt-manager or similiar tools.</p>
+
+<p>When installing, the <strong>root partition must be the last partition on the disk</strong>, so that bsd-cloudinit could grow the partition on first boot.</p>
+
+<p>There should be no need for SWAP. (there is no SWAP in the official Ubuntu cloud images either) But if you want SWAP, always make sure "/" is on the last partition.</p>
+
+<h2>
+<a name="authors-and-contributors" class="anchor" href="#authors-and-contributors"><span class="octicon octicon-link"></span></a>Authors and Contributors</h2>
+
+<p>bsd-cloudinit is built by <a href="https://github.com/pellaeon" class="user-mention">@pellaeon</a>, <a href="https://github.com/apua" class="user-mention">@apua</a>, <a href="https://github.com/iblis17" class="user-mention">@iblis17</a> from Information Technology Service Center
+ of National Chiao Tung University in Taiwan.</p>
+      </section>
+      <footer>
+        <p><small>Hosted on <a href="https://pages.github.com">GitHub Pages</a> using the Dinky theme</small></p>
+      </footer>
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+		
+  </body>
+</html>
