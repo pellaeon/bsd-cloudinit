@@ -62,7 +62,7 @@ class CreateUserPlugin(base.BasePlugin):
             osutils.set_user_password(user_name, password)
         else:
             LOG.info('Creating user "%s" and setting password' % user_name)
-            osutils.createuser(user_name, password, CONF.groups, False)
+            osutils.create_user(user_name, password, CONF.groups, False)
 
         '''for group_name in CONF.groups:
             try:
