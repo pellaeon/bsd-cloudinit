@@ -17,16 +17,16 @@ class FreeBSDUtils(base.BaseOSUtils):
         return True
 
     # not completed
-    def create_user(self, username, password, invite_group, password_expires=False):
+    def create_user(self, username, password, invite_group=None, password_expires=False):
         """
-            invite_group must be a list of string.
+        param invite_group: it must be a list of string.
         """
         home_dir = '/home/' + username
         user_shell = '/bin/tcsh'
         user_comment = 'Created by bsdcloud-init'
         grouplist = ''
 
-        assert isinstance(invite_group, list), "invite_group must be a list."
+        assert not a or isinstance(invite_group, list), "param invite_group must be a list."
         assert invite_group, "invite_group cannot be empty."
         for i in invite_group:
             grouplist += i+','
