@@ -62,12 +62,13 @@ class CreateUserPlugin(base.BasePlugin):
             osutils.set_user_password(user_name, password)
         else:
             LOG.info('Creating user "%s" and setting password' % user_name)
+            osutils.createuser(user_name, password, CONF.groups, False)
 
-        for group_name in CONF.groups:
+        '''for group_name in CONF.groups:
             try:
                 osutils.add_user_to_local_group(user_name, group_name)
             except Exception as ex:
                 LOG.exception(ex)
                 LOG.error('Cannot add user to group "%s"' % group_name)
-
+        '''
         return (base.PLUGIN_EXECUTION_DONE, False)
