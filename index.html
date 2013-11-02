@@ -17,7 +17,7 @@
     <div class="wrapper">
       <header>
         <h1 class="header">bsd-cloudinit</h1>
-        <p class="header">cloud-init scripts for BSD</p>
+        <p class="header">FreeBSD on OpenStack: cloud-init scripts for FreeBSD</p>
 
         <ul>
           <li class="download"><a class="buttons" href="https://github.com/pellaeon/bsd-cloudinit/zipball/master">Download ZIP</a></li>
@@ -31,20 +31,53 @@
       </header>
       <section>
         <h2>
-<a name="bsd-cloudinit" class="anchor" href="#bsd-cloudinit"><span class="octicon octicon-link"></span></a>bsd-cloudinit</h2>
+<a name="freebsd-on-openstack" class="anchor" href="#freebsd-on-openstack"><span class="octicon octicon-link"></span></a>FreeBSD on OpenStack</h2>
+
+<p>There has not been a complete solution to run FreeBSD instances on OpenStack, until now.</p>
+
+<p>With bsd-cloudinit and bsd-cloudinit-installer, you could build a FreeBSD VM image that takes advantage of the cloud environment.</p>
+
+<h2>
+<a name="components" class="anchor" href="#components"><span class="octicon octicon-link"></span></a>Components</h2>
+
+<p>The entire project to run FreeBSD on OpenStack is called Feng Li Su (鳳梨酥), a kind of cuboid-shaped sweet Taiwanese pastry with soft crust and pineapple fillings.</p>
+
+<p>bsd-cloudinit-installer installs bsd-cloudinit, and make <code>/etc/rc.local</code> invoke bsd-cloudinit at first boot.</p>
+
+<h3>
+<a name="bsd-cloudinit" class="anchor" href="#bsd-cloudinit"><span class="octicon octicon-link"></span></a>bsd-cloudinit</h3>
 
 <p>bsd-cloudinit is a Python script based on <a href="https://github.com/cloudbase/cloudbase-init/">cloudbase-init</a> that do various tasks to prepare the FreeBSD instance for cloud environment.</p>
 
-<h2>
+<p>Features:</p>
+
+<ul>
+<li>Set hostname according to OpenStack's instance name</li>
+<li>Automatic SSH host key generation</li>
+<li>Enlarge root partition to what the flavor provides</li>
+<li>SSH public key injection</li>
+<li>View instances' console message in OpenStack console log</li>
+<li>Self removal after first boot</li>
+</ul><h3>
+<a name="bsd-cloudinit-installerhttpsgithubcompellaeonbsd-cloudinit-installer" class="anchor" href="#bsd-cloudinit-installerhttpsgithubcompellaeonbsd-cloudinit-installer"><span class="octicon octicon-link"></span></a>(bsd-cloudinit-installer)[<a href="https://github.com/pellaeon/bsd-cloudinit-installer">https://github.com/pellaeon/bsd-cloudinit-installer</a>]</h3>
+
+<p>A shell script to transform VM into OpenStack VM Template and installs bsd-cloudinit</p>
+
+<p>Features:</p>
+
+<ul>
+<li>Clean SSH host key</li>
+<li>Downloads and install bsd-cloudinit</li>
+<li>Add bsd-cloudinit to <code>/etc/rc.local</code>
+</li>
+</ul><h2>
 <a name="built-image" class="anchor" href="#built-image"><span class="octicon octicon-link"></span></a>Built image</h2>
 
 <p>We have <a href="http://140.113.98.9/bsd-cloudinit/">experimental built images</a> available for download.</p>
 
-<p>You can use the following command to upload the image to Glance:</p>
-
-<pre><code>glance image-create --name "FreeBSD 9.2" --disk-format qcow2 \
- --container-format bare &lt; freebsd-9.2-fls-cloudimage-v1.img
-</code></pre>
+<p>You can use the following command to upload the image to Glance:
+    glance image-create --name "FreeBSD 9.2" --disk-format qcow2 \
+     --container-format bare &lt; freebsd-9.2-fls-cloudimage-v3.img</p>
 
 <p>bsd-cloudinit will inject your SSH public key into the instance, just log in with username <code>freebsd</code>.</p>
 
@@ -58,11 +91,15 @@
 <h3>
 <a name="install-freebsd-via-virt-manager" class="anchor" href="#install-freebsd-via-virt-manager"><span class="octicon octicon-link"></span></a>Install FreeBSD via virt-manager</h3>
 
-<p>First you'll have to install a normal VM via virt-manager or similiar tools.</p>
+<p>First you'll have to install a normal FreeBSD 9.2 (only 9.2 is tested) VM via virt-manager or similiar tools.</p>
 
-<p>When installing, the <strong>root partition must be the last partition on the disk</strong>, so that bsd-cloudinit could grow the partition on first boot.</p>
+<p>The virtual disk size should be as small as possible, so it'll be quicker to deploy and upload. FreeBSD 9.2 requires root partition to be at least 1GB, so you should create a virtual disk slightly larger than 1GB.</p>
+
+<p>The <strong>root partition must be the last partition on the disk</strong>, so that bsd-cloudinit could grow the partition on first boot.</p>
 
 <p>There should be no need for SWAP. (there is no SWAP in the official Ubuntu cloud images either) But if you want SWAP, always make sure <code>/</code> is on the last partition.</p>
+
+<p>After installation completes, do the following actions <strong>as root</strong> to prepare the VM for transformation.</p>
 
 <h3>
 <a name="install-required-python-packages" class="anchor" href="#install-required-python-packages"><span class="octicon octicon-link"></span></a>Install required Python packages</h3>
@@ -76,7 +113,7 @@ easy_install iso8601
 <h3>
 <a name="virtio" class="anchor" href="#virtio"><span class="octicon octicon-link"></span></a>VIRTIO</h3>
 
-<p>Change <code>ada</code> to <code>vtbd</code> in <code>/etc/fstab</code></p>
+<p>Since 9.2 FreeBSD has VIRTIO drivers built into GENERIC kernel, so just change <code>ada</code> to <code>vtbd</code> in <code>/etc/fstab</code>. It'll pick it up on boot.</p>
 
 <h3>
 <a name="output-to-openstack-console-log" class="anchor" href="#output-to-openstack-console-log"><span class="octicon octicon-link"></span></a>Output to OpenStack console log</h3>
@@ -89,6 +126,27 @@ easy_install iso8601
 
 <pre><code>echo 'autoboot_delay="1"' &gt;&gt; /boot/loader.conf
 </code></pre>
+
+<h3>
+<a name="download-and-execute-bsd-cloudinit-installer" class="anchor" href="#download-and-execute-bsd-cloudinit-installer"><span class="octicon octicon-link"></span></a>Download and execute bsd-cloudinit-installer</h3>
+
+<pre><code>fetch https://raw.github.com/pellaeon/bsd-cloudinit-installer/master/installer.sh
+chmod +x installer.sh
+./installer.sh
+</code></pre>
+
+<p>After this step, the VM is no longer a normal VM and not suitable for use with virt-manager.</p>
+
+<p>Follow instruction of the installer to clean command history.</p>
+
+<p>Shutdown
+    shutdown -p now</p>
+
+<p>After shutting down, the VM's virtual disk is ready to be deployed in OpenStack, just upload it to Glance:
+    glance image-create --name "FreeBSD 9.2" --disk-format qcow2 \
+     --container-format bare &lt; freebsd-9.2-fls-cloudimage-v3.img</p>
+
+<p>Then the image is ready to be deployed! Launch an instance to test it!</p>
 
 <h2>
 <a name="authors-and-contributors" class="anchor" href="#authors-and-contributors"><span class="octicon octicon-link"></span></a>Authors and Contributors</h2>
