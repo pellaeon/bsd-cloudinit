@@ -16,7 +16,6 @@ class FreeBSDUtils(base.BaseOSUtils):
             return False
         return True
 
-    # not completed
     def create_user(self, username, password, invite_group=None, password_expires=False):
         """
         param invite_group: it must be a list of string.
