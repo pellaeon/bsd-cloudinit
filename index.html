@@ -76,7 +76,7 @@
 
 <p>We have <a href="http://140.113.98.9/bsd-cloudinit/">experimental built images</a> available for download.</p>
 
-<p>You can use the following command to upload the image to Glance:</p>
+<p>You can use the following command to upload the image to Glance</p>
 
 <pre><code>glance image-create --name "FreeBSD 9.2" --disk-format qcow2 \
  --container-format bare &lt; freebsd-9.2-fls-cloudimage-v3.img
@@ -142,10 +142,12 @@ chmod +x installer.sh
 
 <p>Follow instruction of the installer to clean command history.</p>
 
-<p>Shutdown
-    shutdown -p now</p>
+<p>Shutdown</p>
 
-<p>After shutting down, the VM's virtual disk is ready to be deployed in OpenStack, just upload it to Glance:</p>
+<pre><code>shutdown -p now
+</code></pre>
+
+<p>After shutting down, the VM's virtual disk is ready to be deployed in OpenStack, just upload it to Glance</p>
 
 <pre><code>glance image-create --name "FreeBSD 9.2" --disk-format qcow2 \
  --container-format bare &lt; freebsd-9.2-fls-cloudimage-v3.img
