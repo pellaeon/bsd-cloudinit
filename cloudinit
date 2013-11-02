@@ -1,28 +1,22 @@
 #! /usr/bin/env python
 
-'''usage: bsd-cloudint'''
-
 from cloudbaseinit.metadata import factory as metadata_factory
-from cloudbaseinit.openstack.common import log as logging
 from cloudbaseinit.osutils import factory as osutils_factory
 from cloudbaseinit.plugins import base as plugins_base
 from cloudbaseinit.plugins import factory as plugins_factory
+
+from cloudbaseinit.openstack.common import log as logging
 from cloudbaseinit.openstack.common import cfg
 
 import sys
 
-CONF = cfg.CONF
-LOG = logging.getLogger(__name__)
+cfg.CONF()
 
-CONF(sys.argv[1:])
 logging.setup('cloudbaseinit')
-
-def log_to_tmpfile (msg, FILE='/tmp/cloudinit.log'):
-    print(msg)
-    with open(FILE,'a') as f: f.write(msg+'\n')
+LOG = logging.getLogger('cloudbaseinit.__main__')
 
 osutils = osutils_factory.OSUtilsFactory().get_os_utils()
-log_to_tmpfile("{}".format(osutils))
+LOG.info("{}".format(osutils))
 
 # choose meta data service "httpservice"
 mdsf = metadata_factory.MetadataServiceFactory()
@@ -30,32 +24,31 @@ service = mdsf.get_metadata_service()
 LOG.info('Metadata service loaded: \'%s\'' % service.get_name())
 
 # test get meta data
-log_to_tmpfile('get name =>', service.get_name())
-#log_to_tmpfile('get user data =>', service.get_user_data('openstack'))
-log_to_tmpfile('get meta data => {}'.format(service.get_meta_data('openstack')))
+LOG.info('get name =>', service.get_name())
+#LOG.info('get user data =>', service.get_user_data('openstack'))
+LOG.info('get meta data => {}'.format(service.get_meta_data('openstack')))
 
 # load plugins
 plugins = plugins_factory.PluginFactory().load_plugins()
 
-# running each plugins ?
+# running each plugins
 for plugin in plugins:
 
-    log_to_tmpfile('='*20)
+    LOG.info('='*20)
 
-    log_to_tmpfile("plugin => {}".format(plugin))
+    LOG.info("plugin => {}".format(plugin))
 
     plugin_name = plugin.get_name()
-    log_to_tmpfile("plugin name => {}".format(plugin_name))
+    LOG.info("plugin name => {}".format(plugin_name))
 
     plugin_get_os_requirements = plugin.get_os_requirements()
-    log_to_tmpfile("plugin os requirements => {}".format(plugin_get_os_requirements))
+    LOG.info("plugin os requirements => {}".format(plugin_get_os_requirements))
 
     plugin_config_value = osutils.get_config_value(plugin_name,'Plugins')
-    log_to_tmpfile("plugin config value => {}".format(plugin_config_value))
+    LOG.info("plugin config value => {}".format(plugin_config_value))
 
     try:
-        log_to_tmpfile("{}".format(plugin.execute(service)))
-        log_to_tmpfile('execute success ^_^')
+        LOG.info("{}".format(plugin.execute(service)))
+        LOG.info('execute success ^_^')
     except:
-        log_to_tmpfile('execute fail Q_Q')
-
+        LOG.info('execute fail Q_Q')
