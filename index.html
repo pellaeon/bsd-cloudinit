@@ -36,18 +36,59 @@
 <p>bsd-cloudinit is a Python script based on <a href="https://github.com/cloudbase/cloudbase-init/">cloudbase-init</a> that do various tasks to prepare the FreeBSD instance for cloud environment.</p>
 
 <h2>
-<a name="building-a-freebsd-vm-image-for-openstack" class="anchor" href="#building-a-freebsd-vm-image-for-openstack"><span class="octicon octicon-link"></span></a>Building a FreeBSD VM image for OpenStack</h2>
+<a name="built-image" class="anchor" href="#built-image"><span class="octicon octicon-link"></span></a>Built image</h2>
+
+<p>We have <a href="http://140.113.98.9/bsd-cloudinit/">experimental built images</a> available for download.</p>
+
+<p>You can use the following command to upload the image to Glance:</p>
+
+<pre><code>glance image-create --name "FreeBSD 9.2" --disk-format qcow2 \
+ --container-format bare &lt; freebsd-9.2-fls-cloudimage-v1.img
+</code></pre>
+
+<p>bsd-cloudinit will inject your SSH public key into the instance, just log in with username <code>freebsd</code>.</p>
+
+<p>The root password is <code>fenglisu</code>.</p>
+
+<h2>
+<a name="build-a-freebsd-vm-image-for-openstack" class="anchor" href="#build-a-freebsd-vm-image-for-openstack"><span class="octicon octicon-link"></span></a>Build a FreeBSD VM image for OpenStack</h2>
 
 <p>bsd-cloudinit-installer is the VM image maker, it transforms a VM into a OpenStack VM image.</p>
 
 <h3>
-<a name="installing-freebsd-via-virt-manager" class="anchor" href="#installing-freebsd-via-virt-manager"><span class="octicon octicon-link"></span></a>Installing FreeBSD via virt-manager</h3>
+<a name="install-freebsd-via-virt-manager" class="anchor" href="#install-freebsd-via-virt-manager"><span class="octicon octicon-link"></span></a>Install FreeBSD via virt-manager</h3>
 
 <p>First you'll have to install a normal VM via virt-manager or similiar tools.</p>
 
 <p>When installing, the <strong>root partition must be the last partition on the disk</strong>, so that bsd-cloudinit could grow the partition on first boot.</p>
 
-<p>There should be no need for SWAP. (there is no SWAP in the official Ubuntu cloud images either) But if you want SWAP, always make sure "/" is on the last partition.</p>
+<p>There should be no need for SWAP. (there is no SWAP in the official Ubuntu cloud images either) But if you want SWAP, always make sure <code>/</code> is on the last partition.</p>
+
+<h3>
+<a name="install-required-python-packages" class="anchor" href="#install-required-python-packages"><span class="octicon octicon-link"></span></a>Install required Python packages</h3>
+
+<pre><code>pkg_add -r py27-distribute
+rehash
+easy_install eventlet
+easy_install iso8601
+</code></pre>
+
+<h3>
+<a name="virtio" class="anchor" href="#virtio"><span class="octicon octicon-link"></span></a>VIRTIO</h3>
+
+<p>Change <code>ada</code> to <code>vtbd</code> in <code>/etc/fstab</code></p>
+
+<h3>
+<a name="output-to-openstack-console-log" class="anchor" href="#output-to-openstack-console-log"><span class="octicon octicon-link"></span></a>Output to OpenStack console log</h3>
+
+<pre><code>echo 'console="comsonsole,vidconsole"' &gt;&gt; /boot/loader.conf
+</code></pre>
+
+<h3>
+<a name="bootloader-menu-delay" class="anchor" href="#bootloader-menu-delay"><span class="octicon octicon-link"></span></a>Bootloader menu delay</h3>
+
+<pre><code>echo 'autoboot_delay="1"' &gt;&gt; /boot/loader.conf
+</code></pre>
 
 <h2>
 <a name="authors-and-contributors" class="anchor" href="#authors-and-contributors"><span class="octicon octicon-link"></span></a>Authors and Contributors</h2>
