@@ -25,7 +25,7 @@ class FreeBSDUtils(base.BaseOSUtils):
         user_comment = 'Created by bsdcloud-init'
         grouplist = ''
 
-        assert not a or isinstance(invite_group, list), "param invite_group must be a list."
+        assert not invite_group or isinstance(invite_group, list), "param invite_group must be a list."
         assert invite_group, "invite_group cannot be empty."
         for i in invite_group:
             grouplist += i+','
