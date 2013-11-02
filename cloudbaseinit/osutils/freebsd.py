@@ -32,7 +32,7 @@ class FreeBSDUtils(base.BaseOSUtils):
             grouplist += i+','
         grouplist = grouplist[:-1]
 
-        pw_cmd = "echo " + password + " | pw useradd -n " + username + " -c '" + user_comment + "' -d '" + user_shell + "' -s /bin/tcsh -h 0 -G " + grouplist
+        pw_cmd = "echo " + password + " | pw useradd -n " + username + " -c '" + user_comment + "' -d '" + home_dir + "' -s /bin/tcsh -h 0 -G " + grouplist
         subprocess.check_call(pw_cmd, shell=True)
         subprocess.check_call("mkdir %s" % (home_dir), shell=True)
         subprocess.check_call("chown -R %s:%s %s" % (username, username, home_dir), shell=True)
