@@ -7,10 +7,13 @@ import subprocess
 LOG = logging.getLogger(__name__)
 
 class EnlargeRoot(base.BasePlugin):
+    def _call_shell(self, cmd):
+        return subprocess.check_call(cmd, stderr=subprocess.STDOUT, shell=True)
+
     def execute(self, service):
         rootdisk = 'vtbd0'
-        subprocess.check_call('gpart recover '+rootdisk, shell=True)
-        subprocess.check_call('sysctl kern.geom.debugflags=16', shell=True)
-        subprocess.check_call('gpart resize -i 2 '+rootdisk, shell=True)
-        subprocess.check_call('growfs -y /dev/'+rootdisk+'p2', shell=True)
+        self._call_shell('gpart recover ' + rootdisk)
+        self._call_shell('sysctl kern.geom.debugflags=16')
+        self._call_shell('gpart resize -i 2 ' + rootdisk)
+        self._call_shell('growfs -y /dev/' + rootdisk + 'p2')
         return (base.PLUGIN_EXECUTION_DONE, False)
