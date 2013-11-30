@@ -25,7 +25,7 @@ LOG.info('Metadata service loaded: \'%s\'' % service.get_name())
 
 # test get meta data
 LOG.info('get name =>', service.get_name())
-#LOG.info('get user data =>', service.get_user_data('openstack'))
+LOG.info('get user data =>', service.get_user_data('openstack'))
 LOG.info('get meta data => {}'.format(service.get_meta_data('openstack')))
 
 # load plugins
