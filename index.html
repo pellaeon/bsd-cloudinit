@@ -45,7 +45,8 @@
 <p>bsd-cloudinit-installer installs bsd-cloudinit, and make <code>/etc/rc.local</code> invoke bsd-cloudinit at first boot.</p>
 
 <h3>
-<a name="bsd-cloudinit" class="anchor" href="#bsd-cloudinit"><span class="octicon octicon-link"></span></a>bsd-cloudinit</h3>
+<a name="bsd-cloudinit" class="anchor" href="#bsd-cloudinit"><span class="octicon octicon-link"></span></a><a href="https://github.com/pellaeon/bsd-cloudinit">bsd-cloudinit</a>
+</h3>
 
 <p>bsd-cloudinit is a Python script based on <a href="https://github.com/cloudbase/cloudbase-init/">cloudbase-init</a> that do various tasks to prepare the FreeBSD instance for cloud environment.</p>
 
@@ -89,6 +90,8 @@
 <h2>
 <a name="build-a-freebsd-vm-image-for-openstack" class="anchor" href="#build-a-freebsd-vm-image-for-openstack"><span class="octicon octicon-link"></span></a>Build a FreeBSD VM image for OpenStack</h2>
 
+<p>If you would like to build your own image, follow the guides below.</p>
+
 <p>bsd-cloudinit-installer is the VM image maker, it transforms a VM into a OpenStack VM image.</p>
 
 <h3>
@@ -96,7 +99,7 @@
 
 <p>First you'll have to install a normal FreeBSD 9.2 (only 9.2 is tested) VM via virt-manager or similiar tools.</p>
 
-<p>The virtual disk size should be as small as possible, so it'll be quicker to deploy and upload. FreeBSD 9.2 requires root partition to be at least 1GB, so you should create a virtual disk slightly larger than 1GB.</p>
+<p>The virtual disk size should be as small as possible, so it'll be quicker to deploy and upload. FreeBSD 9.2 requires root partition to be at least 1GB, so you should create a virtual disk slightly larger than 1GB. (We use 1.1GB in our released experimental images.)</p>
 
 <p>The <strong>root partition must be the last partition on the disk</strong>, so that bsd-cloudinit could grow the partition on first boot.</p>
 
@@ -156,13 +159,28 @@ chmod +x installer.sh
 <p>Then the image is ready to be deployed! Launch an instance to test it!</p>
 
 <h2>
+<a name="planned-features" class="anchor" href="#planned-features"><span class="octicon octicon-link"></span></a>Planned Features</h2>
+
+<ul>
+<li>insert customization script</li>
+<li>
+<code>ntpdate</code> on first boot</li>
+<li>commandline options for the installer</li>
+<li>install <code>sudo</code> and remove hardcoded <code>root</code> password</li>
+</ul><h2>
 <a name="authors-and-contributors" class="anchor" href="#authors-and-contributors"><span class="octicon octicon-link"></span></a>Authors and Contributors</h2>
 
 <p>bsd-cloudinit is built by <a href="https://github.com/pellaeon" class="user-mention">@pellaeon</a>, <a href="https://github.com/apua" class="user-mention">@apua</a>, <a href="https://github.com/iblis17" class="user-mention">@iblis17</a> from Information Technology Service Center
  of National Chiao Tung University in Taiwan.</p>
+
+<p><a href="https://github.com/pellaeon" class="user-mention">@pellaeon</a> is the maintainer and takes care of the documentation, planning, coordinating, communications with users.</p>
+
+<p><a href="https://github.com/iblis17" class="user-mention">@iblis17</a> takes care of the shell script parts.</p>
+
+<p><a href="https://github.com/apua" class="user-mention">@apua</a> takes care of the Python bits.</p>
       </section>
       <footer>
-        <p><small>Hosted on <a href="https://pages.github.com">GitHub Pages</a> using the Dinky theme</small></p>
+        <p><small>Hosted on <a href="http://pages.github.com">GitHub Pages</a> using the Dinky theme</small></p>
       </footer>
     </div>
     <!--[if !IE]><script>fixScale(document);</script><![endif]-->
