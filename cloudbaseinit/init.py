@@ -34,7 +34,6 @@ opts = [
 CONF = cfg.CONF
 CONF.register_opts(opts)
 
->>>>>>> pre-merge
 LOG = logging.getLogger(__name__)
 
 
