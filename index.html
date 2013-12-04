@@ -75,7 +75,7 @@
 </ul><h2>
 <a name="built-image" class="anchor" href="#built-image"><span class="octicon octicon-link"></span></a>Built image</h2>
 
-<p>We have <a href="http://140.113.98.9/bsd-cloudinit/">experimental built images</a> available for download.</p>
+<p>We have <a href="http://images.openstack.nctu.edu.tw/bsd-cloudinit/">experimental built images</a> available for download.</p>
 
 <p>You can use the following command to upload the image to Glance</p>
 
@@ -168,6 +168,11 @@ chmod +x installer.sh
 <li>commandline options for the installer</li>
 <li>install <code>sudo</code> and remove hardcoded <code>root</code> password</li>
 </ul><h2>
+<a name="changelog" class="anchor" href="#changelog"><span class="octicon octicon-link"></span></a>Changelog</h2>
+
+<ul>
+<li>1312041: Fix <code>/home/freebsd</code> wrong permission.</li>
+</ul><h2>
 <a name="authors-and-contributors" class="anchor" href="#authors-and-contributors"><span class="octicon octicon-link"></span></a>Authors and Contributors</h2>
 
 <p>bsd-cloudinit is built by <a href="https://github.com/pellaeon" class="user-mention">@pellaeon</a>, <a href="https://github.com/apua" class="user-mention">@apua</a>, <a href="https://github.com/iblis17" class="user-mention">@iblis17</a> from Information Technology Service Center
@@ -180,7 +185,9 @@ chmod +x installer.sh
 <a href="https://github.com/iblis17" class="user-mention">@iblis17</a> takes care of the shell script parts.</li>
 <li>
 <a href="https://github.com/apua" class="user-mention">@apua</a> takes care of the Python bits.</li>
-</ul><h2>
+</ul><p>This project is based on <a href="https://github.com/cloudbase/cloudbase-init">cloudbase-init</a>, we share most of non-OS-specific code.</p>
+
+<h2>
 <a name="donation" class="anchor" href="#donation"><span class="octicon octicon-link"></span></a>Donation</h2>
 
 <p>If you like our project, please consider sending Bitcoin to <code>17sei77Rt29wQ7cx4hqznQ2esMA49Fj9KQ</code></p>
