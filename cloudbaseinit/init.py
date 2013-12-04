@@ -17,11 +17,24 @@
 import sys
 
 from cloudbaseinit.metadata import factory as metadata_factory
+from cloudbaseinit.openstack.common import cfg
 from cloudbaseinit.openstack.common import log as logging
 from cloudbaseinit.osutils import factory as osutils_factory
 from cloudbaseinit.plugins import base as plugins_base
 from cloudbaseinit.plugins import factory as plugins_factory
 
+opts = [
+    cfg.BoolOpt('allow_reboot', default=True, help='Allows OS reboots '
+                'requested by plugins'),
+    cfg.BoolOpt('stop_service_on_exit', default=True, help='In case of '
+                'execution as a service, specifies if the service '
+                'must be gracefully stopped before exiting'),
+]
+
+CONF = cfg.CONF
+CONF.register_opts(opts)
+
+>>>>>>> pre-merge
 LOG = logging.getLogger(__name__)
 
 
@@ -67,8 +80,8 @@ class InitManager(object):
             if not min_os_version:
                 supported = True
             else:
-                os_version = map(int, osutils.get_os_version().split('.'))
-                if os_version >= list(min_os_version):
+                os_major, os_minor = min_os_version
+                if osutils.check_os_version(os_major, os_minor):
                     supported = True
                 else:
                     LOG.debug('Skipping plugin: \'%s\'. OS version not '
@@ -92,13 +105,15 @@ class InitManager(object):
                 if self._check_plugin_os_requirements(osutils, plugin):
                     if self._exec_plugin(osutils, service, plugin):
                         reboot_required = True
+                        if CONF.allow_reboot:
+                            break
         finally:
             service.cleanup()
 
-        if reboot_required:
+        if reboot_required and CONF.allow_reboot:
             try:
                 osutils.reboot()
             except Exception, ex:
                 LOG.error('reboot failed with error \'%s\'' % ex)
-        else:
+        elif CONF.stop_service_on_exit:
             osutils.terminate()

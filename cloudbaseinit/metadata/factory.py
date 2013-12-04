@@ -22,7 +22,6 @@ opts = [
     cfg.ListOpt('metadata_services',
                 default=[
                 'cloudbaseinit.metadata.services.httpservice.HttpService',
-                # comment by Apua, research below another day
                 #'cloudbaseinit.metadata.services.configdrive.configdrive.ConfigDriveService', 
                 #'cloudbaseinit.metadata.services.ec2service.EC2Service'
                 ],
@@ -47,6 +46,6 @@ class MetadataServiceFactory(object):
                 if service.load():
                     return service
             except Exception, ex:
-                LOG.error('Failed to load metadata service \'%(class_path)s\' '
-                          'with error: %(ex)s' % locals())
+                LOG.error('Failed to load metadata service \'%(class_path)s\'')
+                LOG.exception(ex)
         raise Exception("No available service found")

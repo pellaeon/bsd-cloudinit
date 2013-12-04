@@ -48,8 +48,9 @@ class HttpService(base.BaseMetadataService):
 
         osutils = osutils_factory.OSUtilsFactory().get_os_utils()
 
-        os_major_version = int(osutils.get_os_version().split('.')[0])
-        if os_major_version >= 6:
+        osutils = osutils_factory.OSUtilsFactory().get_os_utils()
+
+        if osutils.check_os_version(6, 0):
             # 169.254.x.x addresses are not getting routed starting from
             # Windows Vista / 2008
             metadata_netloc = urlparse.urlparse(CONF.metadata_base_url).netloc
