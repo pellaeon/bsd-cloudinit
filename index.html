@@ -1,0 +1,202 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>bsd-cloudinit by pellaeon</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1 class="header">bsd-cloudinit</h1>
+        <p class="header">FreeBSD on OpenStack: cloud-init scripts for FreeBSD</p>
+
+        <ul>
+          <li class="download"><a class="buttons" href="https://github.com/pellaeon/bsd-cloudinit/zipball/master">Download ZIP</a></li>
+          <li class="download"><a class="buttons" href="https://github.com/pellaeon/bsd-cloudinit/tarball/master">Download TAR</a></li>
+          <li><a class="buttons github" href="https://github.com/pellaeon/bsd-cloudinit">View On GitHub</a></li>
+        </ul>
+
+        <p class="header">This project is maintained by <a class="header name" href="https://github.com/pellaeon">pellaeon</a></p>
+
+
+      </header>
+      <section>
+        <h2>
+<a name="freebsd-on-openstack" class="anchor" href="#freebsd-on-openstack"><span class="octicon octicon-link"></span></a>FreeBSD on OpenStack</h2>
+
+<p>There has not been a complete solution to run FreeBSD instances on OpenStack, until now.</p>
+
+<p>With bsd-cloudinit and bsd-cloudinit-installer, you could build a FreeBSD VM image that takes advantage of the cloud environment.</p>
+
+<h2>
+<a name="components" class="anchor" href="#components"><span class="octicon octicon-link"></span></a>Components</h2>
+
+<p>The entire project to run FreeBSD on OpenStack is called Feng Li Su (鳳梨酥), a kind of cuboid-shaped sweet Taiwanese pastry with soft crust and pineapple fillings.</p>
+
+<p>bsd-cloudinit-installer installs bsd-cloudinit, and make <code>/etc/rc.local</code> invoke bsd-cloudinit at first boot.</p>
+
+<h3>
+<a name="bsd-cloudinit" class="anchor" href="#bsd-cloudinit"><span class="octicon octicon-link"></span></a><a href="https://github.com/pellaeon/bsd-cloudinit">bsd-cloudinit</a>
+</h3>
+
+<p>bsd-cloudinit is a Python script based on <a href="https://github.com/cloudbase/cloudbase-init/">cloudbase-init</a> that do various tasks to prepare the FreeBSD instance for cloud environment.</p>
+
+<p>Features:</p>
+
+<ul>
+<li>Set hostname according to OpenStack's instance name</li>
+<li>Automatic SSH host key generation</li>
+<li>Enlarge root partition to what the flavor provides</li>
+<li>SSH public key injection</li>
+<li>View instances' console message in OpenStack console log</li>
+<li>Self removal after first boot</li>
+</ul><h3>
+<a name="bsd-cloudinit-installer" class="anchor" href="#bsd-cloudinit-installer"><span class="octicon octicon-link"></span></a><a href="https://github.com/pellaeon/bsd-cloudinit-installer">bsd-cloudinit-installer</a>
+</h3>
+
+<p>A shell script to transform VM into OpenStack VM Template and installs bsd-cloudinit</p>
+
+<p>Features:</p>
+
+<ul>
+<li>Clean SSH host key</li>
+<li>Downloads and install bsd-cloudinit</li>
+<li>Add bsd-cloudinit to <code>/etc/rc.local</code>
+</li>
+</ul><h2>
+<a name="built-image" class="anchor" href="#built-image"><span class="octicon octicon-link"></span></a>Built image</h2>
+
+<p>We have <a href="http://images.openstack.nctu.edu.tw/bsd-cloudinit/">experimental built images</a> available for download.</p>
+
+<p>You can use the following command to upload the image to Glance</p>
+
+<pre><code>glance image-create --name "FreeBSD 9.2" --disk-format qcow2 \
+ --container-format bare &lt; freebsd-9.2-fls-cloudimage-v3.img
+</code></pre>
+
+<p>bsd-cloudinit will inject your SSH public key into the instance, just log in with username <code>freebsd</code>.</p>
+
+<p>The root password is <code>fenglisu</code>.</p>
+
+<h2>
+<a name="build-a-freebsd-vm-image-for-openstack" class="anchor" href="#build-a-freebsd-vm-image-for-openstack"><span class="octicon octicon-link"></span></a>Build a FreeBSD VM image for OpenStack</h2>
+
+<p>If you would like to build your own image, follow the guides below.</p>
+
+<p>bsd-cloudinit-installer is the VM image maker, it transforms a VM into a OpenStack VM image.</p>
+
+<h3>
+<a name="install-freebsd-via-virt-manager" class="anchor" href="#install-freebsd-via-virt-manager"><span class="octicon octicon-link"></span></a>Install FreeBSD via virt-manager</h3>
+
+<p>First you'll have to install a normal FreeBSD 9.2 (only 9.2 is tested) VM via virt-manager or similiar tools.</p>
+
+<p>The virtual disk size should be as small as possible, so it'll be quicker to deploy and upload. FreeBSD 9.2 requires root partition to be at least 1GB, so you should create a virtual disk slightly larger than 1GB. (We use 1.1GB in our released experimental images.)</p>
+
+<p>The <strong>root partition must be the last partition on the disk</strong>, so that bsd-cloudinit could grow the partition on first boot.</p>
+
+<p>There should be no need for SWAP. (there is no SWAP in the official Ubuntu cloud images either) But if you want SWAP, always make sure <code>/</code> is on the last partition.</p>
+
+<p>After installation completes, do the following actions <strong>as root</strong> to prepare the VM for transformation.</p>
+
+<h3>
+<a name="install-required-python-packages" class="anchor" href="#install-required-python-packages"><span class="octicon octicon-link"></span></a>Install required Python packages</h3>
+
+<pre><code>pkg_add -r py27-distribute
+rehash
+easy_install eventlet
+easy_install iso8601
+</code></pre>
+
+<h3>
+<a name="virtio" class="anchor" href="#virtio"><span class="octicon octicon-link"></span></a>VIRTIO</h3>
+
+<p>Since 9.2 FreeBSD has VIRTIO drivers built into GENERIC kernel, so just change <code>ada</code> to <code>vtbd</code> in <code>/etc/fstab</code>. It'll pick it up on boot.</p>
+
+<h3>
+<a name="output-to-openstack-console-log" class="anchor" href="#output-to-openstack-console-log"><span class="octicon octicon-link"></span></a>Output to OpenStack console log</h3>
+
+<pre><code>echo 'console="comsonsole,vidconsole"' &gt;&gt; /boot/loader.conf
+</code></pre>
+
+<h3>
+<a name="bootloader-menu-delay" class="anchor" href="#bootloader-menu-delay"><span class="octicon octicon-link"></span></a>Bootloader menu delay</h3>
+
+<pre><code>echo 'autoboot_delay="1"' &gt;&gt; /boot/loader.conf
+</code></pre>
+
+<h3>
+<a name="download-and-execute-bsd-cloudinit-installer" class="anchor" href="#download-and-execute-bsd-cloudinit-installer"><span class="octicon octicon-link"></span></a>Download and execute bsd-cloudinit-installer</h3>
+
+<pre><code>fetch https://raw.github.com/pellaeon/bsd-cloudinit-installer/master/installer.sh
+chmod +x installer.sh
+./installer.sh
+</code></pre>
+
+<p>After this step, the VM is no longer a normal VM and not suitable for use with virt-manager.</p>
+
+<p>Follow instruction of the installer to clean command history.</p>
+
+<p>Shutdown</p>
+
+<pre><code>shutdown -p now
+</code></pre>
+
+<p>After shutting down, the VM's virtual disk is ready to be deployed in OpenStack, just upload it to Glance</p>
+
+<pre><code>glance image-create --name "FreeBSD 9.2" --disk-format qcow2 \
+ --container-format bare &lt; freebsd-9.2-fls-cloudimage-v3.img
+</code></pre>
+
+<p>Then the image is ready to be deployed! Launch an instance to test it!</p>
+
+<h2>
+<a name="planned-features" class="anchor" href="#planned-features"><span class="octicon octicon-link"></span></a>Planned Features</h2>
+
+<ul>
+<li>insert customization script</li>
+<li>
+<code>ntpdate</code> on first boot</li>
+<li>commandline options for the installer</li>
+<li>install <code>sudo</code> and remove hardcoded <code>root</code> password</li>
+</ul><h2>
+<a name="changelog" class="anchor" href="#changelog"><span class="octicon octicon-link"></span></a>Changelog</h2>
+
+<ul>
+<li>1312041: Fix <code>/home/freebsd</code> wrong permission.</li>
+</ul><h2>
+<a name="authors-and-contributors" class="anchor" href="#authors-and-contributors"><span class="octicon octicon-link"></span></a>Authors and Contributors</h2>
+
+<p>bsd-cloudinit is built by <a href="https://github.com/pellaeon" class="user-mention">@pellaeon</a>, <a href="https://github.com/apua" class="user-mention">@apua</a>, <a href="https://github.com/iblis17" class="user-mention">@iblis17</a> from Information Technology Service Center
+ of National Chiao Tung University in Taiwan.</p>
+
+<ul>
+<li>
+<a href="https://github.com/pellaeon" class="user-mention">@pellaeon</a> is the maintainer and takes care of the documentation, planning, coordinating, communications with users.</li>
+<li>
+<a href="https://github.com/iblis17" class="user-mention">@iblis17</a> takes care of the shell script parts.</li>
+<li>
+<a href="https://github.com/apua" class="user-mention">@apua</a> takes care of the Python bits.</li>
+</ul><p>This project is based on <a href="https://github.com/cloudbase/cloudbase-init">cloudbase-init</a>, we share most of non-OS-specific code.</p>
+
+<h2>
+<a name="donation" class="anchor" href="#donation"><span class="octicon octicon-link"></span></a>Donation</h2>
+
+<p>If you like our project, please consider sending Bitcoin to <code>17sei77Rt29wQ7cx4hqznQ2esMA49Fj9KQ</code></p>
+      </section>
+      <footer>
+        <p><small>Hosted on <a href="http://pages.github.com">GitHub Pages</a> using the Dinky theme</small></p>
+      </footer>
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+		
+  </body>
+</html>
