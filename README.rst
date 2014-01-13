@@ -1,6 +1,10 @@
 OpenStack Cloud Initialization for BSD (Project Feng Li Su aka 鳳梨酥)
 ======================================================================
 
+bsd-cloudinit is a cloud instance initialization framework for FreeBSD. It's based on `cloudbase-init<https://github.com/cloudbase/cloudbase-init>`_.
+
+Our documentation is at http://pellaeon.github.io/bsd-cloudinit/
+
 Portable OpenStack Cloud Initialization Service 
 ===============================================
 
