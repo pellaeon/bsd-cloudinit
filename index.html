@@ -97,9 +97,11 @@
 <h3>
 <a name="install-freebsd-via-virt-manager" class="anchor" href="#install-freebsd-via-virt-manager"><span class="octicon octicon-link"></span></a>Install FreeBSD via virt-manager</h3>
 
-<p>First you'll have to install a normal FreeBSD 9.2 (only 9.2 is tested) VM via virt-manager or similiar tools.</p>
+<p>First you'll have to install a normal FreeBSD (version 9.2 and 10.0 are tested) VM via virt-manager or similiar tools.</p>
 
-<p>The virtual disk size should be as small as possible, so it'll be quicker to deploy and upload. FreeBSD 9.2 requires root partition to be at least 1GB, so you should create a virtual disk slightly larger than 1GB. (We use 1.1GB in our released experimental images.)</p>
+<p>Before booting into the installation CD, configure the VM's disk and network to use VIRTIO. Since FreeBSD 9.2 it should be able to detect it correctly.</p>
+
+<p>The virtual disk size should be as small as possible, so it'll be quicker to deploy and upload. FreeBSD  requires root partition to be at least 1GB, so you should create a virtual disk slightly larger than 1GB. (We use 1.1GB in our released experimental images.)</p>
 
 <p>The <strong>root partition must be the last partition on the disk</strong>, so that bsd-cloudinit could grow the partition on first boot.</p>
 
@@ -110,7 +112,7 @@
 <h3>
 <a name="install-required-python-packages" class="anchor" href="#install-required-python-packages"><span class="octicon octicon-link"></span></a>Install required Python packages</h3>
 
-<pre><code>pkg_add -r py27-distribute
+<pre><code>pkg install py27-setuptools
 rehash
 easy_install eventlet
 easy_install iso8601
@@ -119,12 +121,13 @@ easy_install iso8601
 <h3>
 <a name="virtio" class="anchor" href="#virtio"><span class="octicon octicon-link"></span></a>VIRTIO</h3>
 
-<p>Since 9.2 FreeBSD has VIRTIO drivers built into GENERIC kernel, so just change <code>ada</code> to <code>vtbd</code> in <code>/etc/fstab</code>. It'll pick it up on boot.</p>
+<p>If you installed on VIRTIO disk, there should be nothing to worry about.
+To make sure, disk names in <code>/etc/fstab</code> should be <code>vtbd</code>.</p>
 
 <h3>
 <a name="output-to-openstack-console-log" class="anchor" href="#output-to-openstack-console-log"><span class="octicon octicon-link"></span></a>Output to OpenStack console log</h3>
 
-<pre><code>echo 'console="comsonsole,vidconsole"' &gt;&gt; /boot/loader.conf
+<pre><code>echo 'console="comconsole,vidconsole"' &gt;&gt; /boot/loader.conf
 </code></pre>
 
 <h3>
@@ -136,7 +139,7 @@ easy_install iso8601
 <h3>
 <a name="download-and-execute-bsd-cloudinit-installer" class="anchor" href="#download-and-execute-bsd-cloudinit-installer"><span class="octicon octicon-link"></span></a>Download and execute bsd-cloudinit-installer</h3>
 
-<pre><code>fetch https://raw.github.com/pellaeon/bsd-cloudinit-installer/master/installer.sh
+<pre><code>fetch --no-verify-peer https://raw.github.com/pellaeon/bsd-cloudinit-installer/master/installer.sh
 chmod +x installer.sh
 ./installer.sh
 </code></pre>
@@ -163,7 +166,6 @@ chmod +x installer.sh
 
 <ul>
 <li>port cloudinit's <a href="http://cloudinit.readthedocs.org/en/latest/topics/examples.html">cloudconfig</a> parser to enable further customization of instance</li>
-<li>FreeBSD 10 support, release FreeBSD 10 image</li>
 <li>Xen image</li>
 <li>
 <code>ntpdate</code> on first boot</li>
