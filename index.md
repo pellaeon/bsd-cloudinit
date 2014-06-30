@@ -62,6 +62,12 @@ Since 9.2 FreeBSD has VIRTIO drivers built into GENERIC kernel, so just change `
 ### Bootloader menu delay
     echo 'autoboot_delay="1"' >> /boot/loader.conf
 ### Download and execute bsd-cloudinit-installer
+
+The installer will bootstrap PKGNG for you and install the following packages:
+
+- py-setuptools
+- ca_root_nss
+
     fetch https://raw.github.com/pellaeon/bsd-cloudinit-installer/master/installer.sh
     chmod +x installer.sh
     ./installer.sh
