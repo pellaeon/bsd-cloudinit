@@ -54,13 +54,6 @@ There should be no need for SWAP. (there is no SWAP in the official Ubuntu cloud
 
 After installation completes, do the following actions **as root** to prepare the VM for transformation.
 
-### Install required Python packages
-
-    pkg_add -r py27-distribute
-    rehash
-    easy_install eventlet
-    easy_install iso8601
-
 ### VIRTIO
 Since 9.2 FreeBSD has VIRTIO drivers built into GENERIC kernel, so just change `ada` to `vtbd` in `/etc/fstab`. It'll pick it up on boot.
 
