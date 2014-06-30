@@ -68,10 +68,11 @@ The installer will bootstrap PKGNG for you and install the following packages:
 * py-setuptools
 * ca_root_nss
 
-
-    fetch https://raw.github.com/pellaeon/bsd-cloudinit-installer/master/installer.sh
-    chmod +x installer.sh
-    ./installer.sh
+```
+fetch https://raw.github.com/pellaeon/bsd-cloudinit-installer/master/installer.sh
+chmod +x installer.sh
+./installer.sh
+```
 
 After this step, the VM is no longer a normal VM and not suitable for use with virt-manager.
 
