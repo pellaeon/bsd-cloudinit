@@ -110,15 +110,6 @@
 <p>After installation completes, do the following actions <strong>as root</strong> to prepare the VM for transformation.</p>
 
 <h3>
-<a name="install-required-python-packages" class="anchor" href="#install-required-python-packages"><span class="octicon octicon-link"></span></a>Install required Python packages</h3>
-
-<pre><code>pkg install py27-setuptools
-rehash
-easy_install eventlet
-easy_install iso8601
-</code></pre>
-
-<h3>
 <a name="virtio" class="anchor" href="#virtio"><span class="octicon octicon-link"></span></a>VIRTIO</h3>
 
 <p>If you installed on VIRTIO disk, there should be nothing to worry about.
@@ -139,7 +130,12 @@ To make sure, disk names in <code>/etc/fstab</code> should be <code>vtbd</code>.
 <h3>
 <a name="download-and-execute-bsd-cloudinit-installer" class="anchor" href="#download-and-execute-bsd-cloudinit-installer"><span class="octicon octicon-link"></span></a>Download and execute bsd-cloudinit-installer</h3>
 
-<pre><code>fetch --no-verify-peer https://raw.github.com/pellaeon/bsd-cloudinit-installer/master/installer.sh
+<p>The installer will bootstrap PKGNG for you and install the following packages:</p>
+
+<ul>
+<li>py-setuptools</li>
+<li>ca_root_nss</li>
+</ul><pre><code>fetch https://raw.github.com/pellaeon/bsd-cloudinit-installer/master/installer.sh
 chmod +x installer.sh
 ./installer.sh
 </code></pre>
@@ -176,6 +172,7 @@ chmod +x installer.sh
 
 <ul>
 <li>1312041: Fix <code>/home/freebsd</code> wrong permission.</li>
+<li>2014/06/30: Auto Python module installation in installer</li>
 </ul><h2>
 <a name="authors-and-contributors" class="anchor" href="#authors-and-contributors"><span class="octicon octicon-link"></span></a>Authors and Contributors</h2>
 
