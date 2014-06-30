@@ -69,7 +69,7 @@ The installer will bootstrap PKGNG for you and install the following packages:
 * ca_root_nss
 
 ```
-fetch --no-verify-peer https://raw.github.com/pellaeon/bsd-cloudinit-installer/master/installer.sh
+fetch https://raw.github.com/pellaeon/bsd-cloudinit-installer/master/installer.sh
 chmod +x installer.sh
 ./installer.sh
 ```
