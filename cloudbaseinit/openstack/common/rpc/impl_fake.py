@@ -1,6 +1,4 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
-#    Copyright 2011 OpenStack LLC
+#    Copyright 2011 OpenStack Foundation
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -13,16 +11,22 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+
 """Fake RPC implementation which calls proxy methods directly with no
 queues.  Casts will block, but this is very useful for tests.
 """
 
 import inspect
+# NOTE(russellb): We specifically want to use json, not our own jsonutils.
+# jsonutils has some extra logic to automatically convert objects to primitive
+# types so that they can be serialized.  We want to catch all cases where
+# non-primitive types make it into this code and treat it as an error.
+import json
 import time
 
 import eventlet
+import six
 
-from cloudbaseinit.openstack.common import jsonutils
 from cloudbaseinit.openstack.common.rpc import common as rpc_common
 
 CONSUMERS = {}
@@ -53,18 +57,19 @@ class Consumer(object):
         self.topic = topic
         self.proxy = proxy
 
-    def call(self, context, version, method, args, timeout):
+    def call(self, context, version, method, namespace, args, timeout):
         done = eventlet.event.Event()
 
         def _inner():
             ctxt = RpcContext.from_dict(context.to_dict())
             try:
-                rval = self.proxy.dispatch(context, version, method, **args)
+                rval = self.proxy.dispatch(context, version, method,
+                                           namespace, **args)
                 res = []
                 # Caller might have called ctxt.reply() manually
                 for (reply, failure) in ctxt._response:
                     if failure:
-                        raise failure[0], failure[1], failure[2]
+                        six.reraise(failure[0], failure[1], failure[2])
                     res.append(reply)
                 # if ending not 'sent'...we might have more data to
                 # return from the function itself
@@ -75,6 +80,8 @@ class Consumer(object):
                     else:
                         res.append(rval)
                 done.send(res)
+            except rpc_common.ClientException as e:
+                done.send_exception(e._exc_info[1])
             except Exception as e:
                 done.send_exception(e)
 
@@ -115,13 +122,13 @@ class Connection(object):
 
 
 def create_connection(conf, new=True):
-    """Create a connection"""
+    """Create a connection."""
     return Connection()
 
 
 def check_serialize(msg):
     """Make sure a message intended for rpc can be serialized."""
-    jsonutils.dumps(msg)
+    json.dumps(msg)
 
 
 def multicall(conf, context, topic, msg, timeout=None):
@@ -133,14 +140,16 @@ def multicall(conf, context, topic, msg, timeout=None):
     if not method:
         return
     args = msg.get('args', {})
-    version = msg.get('version', None)
+    version = msg.get('version')
+    namespace = msg.get('namespace')
 
     try:
         consumer = CONSUMERS[topic][0]
     except (KeyError, IndexError):
-        return iter([None])
+        raise rpc_common.Timeout("No consumers available")
     else:
-        return consumer.call(context, version, method, args, timeout)
+        return consumer.call(context, version, method, namespace, args,
+                             timeout)
 
 
 def call(conf, context, topic, msg, timeout=None):
@@ -154,13 +163,14 @@ def call(conf, context, topic, msg, timeout=None):
 
 
 def cast(conf, context, topic, msg):
+    check_serialize(msg)
     try:
         call(conf, context, topic, msg)
     except Exception:
         pass
 
 
-def notify(conf, context, topic, msg):
+def notify(conf, context, topic, msg, envelope):
     check_serialize(msg)
 
 
@@ -169,16 +179,17 @@ def cleanup():
 
 
 def fanout_cast(conf, context, topic, msg):
-    """Cast to all consumers of a topic"""
+    """Cast to all consumers of a topic."""
     check_serialize(msg)
     method = msg.get('method')
     if not method:
         return
     args = msg.get('args', {})
-    version = msg.get('version', None)
+    version = msg.get('version')
+    namespace = msg.get('namespace')
 
     for consumer in CONSUMERS.get(topic, []):
         try:
-            consumer.call(context, version, method, args, None)
+            consumer.call(context, version, method, namespace, args, None)
         except Exception:
             pass

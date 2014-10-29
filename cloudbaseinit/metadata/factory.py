@@ -14,21 +14,25 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from cloudbaseinit.openstack.common import cfg
+from oslo.config import cfg
+
+from cloudbaseinit import exception
 from cloudbaseinit.openstack.common import log as logging
 from cloudbaseinit.utils import classloader
 
 opts = [
-    cfg.ListOpt('metadata_services',
-                default=[
-                'cloudbaseinit.metadata.services.httpservice.HttpService',
-                #'cloudbaseinit.metadata.services.configdrive.configdrive.ConfigDriveService', 
-                #'cloudbaseinit.metadata.services.ec2service.EC2Service'
-                ],
-                help='List of enabled metadata service classes, '
-                'to be tested fro availability in the provided order. '
-                'The first available service will be used to retrieve '
-                'metadata')
+    cfg.ListOpt(
+        'metadata_services',
+        default=[
+            'cloudbaseinit.metadata.services.httpservice.HttpService',
+            #'cloudbaseinit.metadata.services.configdrive.ConfigDriveService',
+            #'cloudbaseinit.metadata.services.ec2service.EC2Service',
+            'cloudbaseinit.metadata.services.maasservice.MaaSHttpService'
+        ],
+        help='List of enabled metadata service classes, '
+        'to be tested fro availability in the provided order. '
+        'The first available service will be used to retrieve '
+        'metadata')
 ]
 
 CONF = cfg.CONF
@@ -36,16 +40,15 @@ CONF.register_opts(opts)
 LOG = logging.getLogger(__name__)
 
 
-class MetadataServiceFactory(object):
-    def get_metadata_service(self):
-        # Return the first service that loads correctly
-        cl = classloader.ClassLoader()
-        for class_path in CONF.metadata_services:
-            service = cl.load_class(class_path)()
-            try:
-                if service.load():
-                    return service
-            except Exception, ex:
-                LOG.error('Failed to load metadata service \'%(class_path)s\'')
-                LOG.exception(ex)
-        raise Exception("No available service found")
+def get_metadata_service():
+    # Return the first service that loads correctly
+    cl = classloader.ClassLoader()
+    for class_path in CONF.metadata_services:
+        service = cl.load_class(class_path)()
+        try:
+            if service.load():
+                return service
+        except Exception as ex:
+            LOG.error("Failed to load metadata service '%s'" % class_path)
+            LOG.exception(ex)
+    raise exception.CloudbaseInitException("No available service found")

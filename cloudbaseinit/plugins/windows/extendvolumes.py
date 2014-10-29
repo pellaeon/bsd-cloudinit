@@ -17,10 +17,11 @@
 import ctypes
 import re
 
-from cloudbaseinit.openstack.common import cfg
+from oslo.config import cfg
+
 from cloudbaseinit.openstack.common import log as logging
 from cloudbaseinit.plugins import base
-from cloudbaseinit.plugins.windows import vds
+from cloudbaseinit.utils.windows import vds
 
 ole32 = ctypes.windll.ole32
 ole32.CoTaskMemFree.restype = None
@@ -56,7 +57,7 @@ class ExtendVolumesPlugin(base.BasePlugin):
                 if volume_idxs is not None:
                     volume_name = ctypes.wstring_at(volume_prop.pwszName)
                     volume_idx = self._get_volume_index(volume_name)
-                    if not volume_idx in volume_idxs:
+                    if volume_idx not in volume_idxs:
                         extend_volume = False
 
                 if extend_volume:
@@ -154,9 +155,9 @@ class ExtendVolumesPlugin(base.BasePlugin):
 
     def _get_volumes_to_extend(self):
         if CONF.volumes_to_extend is not None:
-            return map(int, CONF.volumes_to_extend)
+            return list(map(int, CONF.volumes_to_extend))
 
-    def execute(self, service):
+    def execute(self, service, shared_data):
         svc = vds.load_vds_service()
         providers = self._query_providers(svc)
 

@@ -14,9 +14,10 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import _winreg
 import ctypes
+import os
 import re
+import six
 import time
 import win32process
 import win32security
@@ -24,9 +25,13 @@ import wmi
 
 from ctypes import windll
 from ctypes import wintypes
+from six.moves import winreg
+from win32com import client
 
+from cloudbaseinit import exception
 from cloudbaseinit.openstack.common import log as logging
 from cloudbaseinit.osutils import base
+from cloudbaseinit.utils.windows import network
 
 LOG = logging.getLogger(__name__)
 
@@ -36,18 +41,20 @@ netapi32 = windll.netapi32
 userenv = windll.userenv
 iphlpapi = windll.iphlpapi
 Ws2_32 = windll.Ws2_32
+setupapi = windll.setupapi
+msvcrt = ctypes.cdll.msvcrt
 
 
 class Win32_PROFILEINFO(ctypes.Structure):
     _fields_ = [
-        ('dwSize',          wintypes.DWORD),
-        ('dwFlags',         wintypes.DWORD),
-        ('lpUserName',      wintypes.LPWSTR),
-        ('lpProfilePath',   wintypes.LPWSTR),
-        ('lpDefaultPath',   wintypes.LPWSTR),
-        ('lpServerName',    wintypes.LPWSTR),
-        ('lpPolicyPath',    wintypes.LPWSTR),
-        ('hprofile',        wintypes.HANDLE)
+        ('dwSize', wintypes.DWORD),
+        ('dwFlags', wintypes.DWORD),
+        ('lpUserName', wintypes.LPWSTR),
+        ('lpProfilePath', wintypes.LPWSTR),
+        ('lpDefaultPath', wintypes.LPWSTR),
+        ('lpServerName', wintypes.LPWSTR),
+        ('lpPolicyPath', wintypes.LPWSTR),
+        ('hprofile', wintypes.HANDLE)
     ]
 
 
@@ -99,6 +106,57 @@ class Win32_OSVERSIONINFOEX_W(ctypes.Structure):
     ]
 
 
+class GUID(ctypes.Structure):
+    _fields_ = [
+        ("data1", ctypes.wintypes.DWORD),
+        ("data2", ctypes.wintypes.WORD),
+        ("data3", ctypes.wintypes.WORD),
+        ("data4", ctypes.c_byte * 8)]
+
+    def __init__(self, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8):
+        self.data1 = l
+        self.data2 = w1
+        self.data3 = w2
+        self.data4[0] = b1
+        self.data4[1] = b2
+        self.data4[2] = b3
+        self.data4[3] = b4
+        self.data4[4] = b5
+        self.data4[5] = b6
+        self.data4[6] = b7
+        self.data4[7] = b8
+
+
+class Win32_SP_DEVICE_INTERFACE_DATA(ctypes.Structure):
+    _fields_ = [
+        ('cbSize', wintypes.DWORD),
+        ('InterfaceClassGuid', GUID),
+        ('Flags', wintypes.DWORD),
+        ('Reserved', ctypes.POINTER(wintypes.ULONG))
+    ]
+
+
+class Win32_SP_DEVICE_INTERFACE_DETAIL_DATA_W(ctypes.Structure):
+    _fields_ = [
+        ('cbSize', wintypes.DWORD),
+        ('DevicePath', ctypes.c_byte * 2)
+    ]
+
+
+class Win32_STORAGE_DEVICE_NUMBER(ctypes.Structure):
+    _fields_ = [
+        ('DeviceType', wintypes.DWORD),
+        ('DeviceNumber', wintypes.DWORD),
+        ('PartitionNumber', wintypes.DWORD)
+    ]
+
+
+msvcrt.malloc.argtypes = [ctypes.c_size_t]
+msvcrt.malloc.restype = ctypes.c_void_p
+
+msvcrt.free.argtypes = [ctypes.c_void_p]
+msvcrt.free.restype = None
+
 kernel32.VerifyVersionInfoW.argtypes = [
     ctypes.POINTER(Win32_OSVERSIONINFOEX_W),
     wintypes.DWORD, wintypes.ULARGE_INTEGER]
@@ -117,6 +175,19 @@ kernel32.GetLogicalDriveStringsW.restype = wintypes.DWORD
 
 kernel32.GetDriveTypeW.argtypes = [wintypes.LPCWSTR]
 kernel32.GetDriveTypeW.restype = wintypes.UINT
+
+kernel32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD,
+                                 wintypes.DWORD, wintypes.LPVOID,
+                                 wintypes.DWORD, wintypes.DWORD,
+                                 wintypes.HANDLE]
+kernel32.CreateFileW.restype = wintypes.HANDLE
+
+kernel32.DeviceIoControl.argtypes = [wintypes.HANDLE, wintypes.DWORD,
+                                     wintypes.LPVOID, wintypes.DWORD,
+                                     wintypes.LPVOID, wintypes.DWORD,
+                                     ctypes.POINTER(wintypes.DWORD),
+                                     wintypes.LPVOID]
+kernel32.DeviceIoControl.restype = wintypes.BOOL
 
 kernel32.GetProcessHeap.argtypes = []
 kernel32.GetProcessHeap.restype = wintypes.HANDLE
@@ -138,11 +209,40 @@ iphlpapi.GetIpForwardTable.restype = wintypes.DWORD
 
 Ws2_32.inet_ntoa.restype = ctypes.c_char_p
 
+setupapi.SetupDiGetClassDevsW.argtypes = [ctypes.POINTER(GUID),
+                                          wintypes.LPCWSTR,
+                                          wintypes.HANDLE,
+                                          wintypes.DWORD]
+setupapi.SetupDiGetClassDevsW.restype = wintypes.HANDLE
+
+setupapi.SetupDiEnumDeviceInterfaces.argtypes = [
+    wintypes.HANDLE,
+    wintypes.LPVOID,
+    ctypes.POINTER(GUID),
+    wintypes.DWORD,
+    ctypes.POINTER(Win32_SP_DEVICE_INTERFACE_DATA)]
+setupapi.SetupDiEnumDeviceInterfaces.restype = wintypes.BOOL
+
+setupapi.SetupDiGetDeviceInterfaceDetailW.argtypes = [
+    wintypes.HANDLE,
+    ctypes.POINTER(Win32_SP_DEVICE_INTERFACE_DATA),
+    ctypes.POINTER(Win32_SP_DEVICE_INTERFACE_DETAIL_DATA_W),
+    wintypes.DWORD,
+    ctypes.POINTER(wintypes.DWORD),
+    wintypes.LPVOID]
+setupapi.SetupDiGetDeviceInterfaceDetailW.restype = wintypes.BOOL
+
+setupapi.SetupDiDestroyDeviceInfoList.argtypes = [wintypes.HANDLE]
+setupapi.SetupDiDestroyDeviceInfoList.restype = wintypes.BOOL
+
 VER_MAJORVERSION = 1
 VER_MINORVERSION = 2
 VER_BUILDNUMBER = 4
 
 VER_GREATER_EQUAL = 3
+
+GUID_DEVINTERFACE_DISK = GUID(0x53f56307, 0xb6bf, 0x11d0, 0x94, 0xf2,
+                              0x00, 0xa0, 0xc9, 0x1e, 0xfb, 0x8b)
 
 
 class WindowsUtils(base.BaseOSUtils):
@@ -154,13 +254,46 @@ class WindowsUtils(base.BaseOSUtils):
     ERROR_MEMBER_IN_ALIAS = 1378
     ERROR_INVALID_MEMBER = 1388
     ERROR_OLD_WIN_VERSION = 1150
+    ERROR_NO_MORE_FILES = 18
+
+    INVALID_HANDLE_VALUE = 0xFFFFFFFF
+
+    FILE_SHARE_READ = 1
+    FILE_SHARE_WRITE = 2
+
+    OPEN_EXISTING = 3
+
+    IOCTL_STORAGE_GET_DEVICE_NUMBER = 0x002D1080
+
+    MAX_PATH = 260
+
+    DIGCF_PRESENT = 2
+    DIGCF_DEVICEINTERFACE = 0x10
 
     DRIVE_CDROM = 5
+
+    SERVICE_STATUS_STOPPED = "Stopped"
+    SERVICE_STATUS_START_PENDING = "Start Pending"
+    SERVICE_STATUS_STOP_PENDING = "Stop Pending"
+    SERVICE_STATUS_RUNNING = "Running"
+    SERVICE_STATUS_CONTINUE_PENDING = "Continue Pending"
+    SERVICE_STATUS_PAUSE_PENDING = "Pause Pending"
+    SERVICE_STATUS_PAUSED = "Paused"
+    SERVICE_STATUS_UNKNOWN = "Unknown"
+
+    SERVICE_START_MODE_AUTOMATIC = "Automatic"
+    SERVICE_START_MODE_MANUAL = "Manual"
+    SERVICE_START_MODE_DISABLED = "Disabled"
 
     ComputerNamePhysicalDnsHostname = 5
 
     _config_key = 'SOFTWARE\\Cloudbase Solutions\\Cloudbase-Init\\'
     _service_name = 'cloudbase-init'
+
+    _FW_IP_PROTOCOL_TCP = 6
+    _FW_IP_PROTOCOL_UDP = 17
+    _FW_SCOPE_ALL = 0
+    _FW_SCOPE_LOCAL_SUBNET = 1
 
     def _enable_shutdown_privilege(self):
         process = win32process.GetCurrentProcess()
@@ -179,13 +312,13 @@ class WindowsUtils(base.BaseOSUtils):
         ret_val = advapi32.InitiateSystemShutdownW(0, "Cloudbase-Init reboot",
                                                    0, True, True)
         if not ret_val:
-            raise Exception("Reboot failed")
+            raise exception.CloudbaseInitException("Reboot failed")
 
     def _get_user_wmi_object(self, username):
         conn = wmi.WMI(moniker='//./root/cimv2')
         username_san = self._sanitize_wmi_input(username)
         q = conn.query('SELECT * FROM Win32_Account where name = '
-                       '\'%(username_san)s\'' % locals())
+                       '\'%s\'' % username_san)
         if len(q) > 0:
             return q[0]
         return None
@@ -207,10 +340,10 @@ class WindowsUtils(base.BaseOSUtils):
             self._set_user_password_expiration(username, password_expires)
         else:
             if create:
-                msg = "Create user failed: %(err)s"
+                msg = "Create user failed: %s"
             else:
-                msg = "Set user password failed: %(err)s"
-            raise Exception(msg % locals())
+                msg = "Set user password failed: %s"
+            raise exception.CloudbaseInitException(msg % err)
 
     def _sanitize_wmi_input(self, value):
         return value.replace('\'', '\'\'')
@@ -240,34 +373,34 @@ class WindowsUtils(base.BaseOSUtils):
         sidNameUse = wintypes.DWORD()
 
         ret_val = advapi32.LookupAccountNameW(
-            0, unicode(username), sid, ctypes.byref(cbSid), domainName,
+            0, six.text_type(username), sid, ctypes.byref(cbSid), domainName,
             ctypes.byref(cchReferencedDomainName), ctypes.byref(sidNameUse))
         if not ret_val:
-            raise Exception("Cannot get user SID")
+            raise exception.CloudbaseInitException("Cannot get user SID")
 
         return (sid, domainName.value)
 
     def add_user_to_local_group(self, username, groupname):
 
         lmi = Win32_LOCALGROUP_MEMBERS_INFO_3()
-        lmi.lgrmi3_domainandname = unicode(username)
+        lmi.lgrmi3_domainandname = six.text_type(username)
 
-        ret_val = netapi32.NetLocalGroupAddMembers(0, unicode(groupname), 3,
-                                                   ctypes.addressof(lmi), 1)
+        ret_val = netapi32.NetLocalGroupAddMembers(0, six.text_type(groupname),
+                                                   3, ctypes.addressof(lmi), 1)
 
         if ret_val == self.NERR_GroupNotFound:
-            raise Exception('Group not found')
+            raise exception.CloudbaseInitException('Group not found')
         elif ret_val == self.ERROR_ACCESS_DENIED:
-            raise Exception('Access denied')
+            raise exception.CloudbaseInitException('Access denied')
         elif ret_val == self.ERROR_NO_SUCH_MEMBER:
-            raise Exception('Username not found')
+            raise exception.CloudbaseInitException('Username not found')
         elif ret_val == self.ERROR_MEMBER_IN_ALIAS:
             # The user is already a member of the group
             pass
         elif ret_val == self.ERROR_INVALID_MEMBER:
-            raise Exception('Invalid user')
+            raise exception.CloudbaseInitException('Invalid user')
         elif ret_val != 0:
-            raise Exception('Unknown error')
+            raise exception.CloudbaseInitException('Unknown error')
 
     def get_user_sid(self, username):
         r = self._get_user_wmi_object(username)
@@ -278,20 +411,22 @@ class WindowsUtils(base.BaseOSUtils):
     def create_user_logon_session(self, username, password, domain='.',
                                   load_profile=True):
         token = wintypes.HANDLE()
-        ret_val = advapi32.LogonUserW(unicode(username), unicode(domain),
-                                      unicode(password), 2, 0,
+        ret_val = advapi32.LogonUserW(six.text_type(username),
+                                      six.text_type(domain),
+                                      six.text_type(password), 2, 0,
                                       ctypes.byref(token))
         if not ret_val:
-            raise Exception("User logon failed")
+            raise exception.CloudbaseInitException("User logon failed")
 
         if load_profile:
             pi = Win32_PROFILEINFO()
             pi.dwSize = ctypes.sizeof(Win32_PROFILEINFO)
-            pi.lpUserName = unicode(username)
+            pi.lpUserName = six.text_type(username)
             ret_val = userenv.LoadUserProfileW(token, ctypes.byref(pi))
             if not ret_val:
                 kernel32.CloseHandle(token)
-                raise Exception("Cannot load user profile")
+                raise exception.CloudbaseInitException(
+                    "Cannot load user profile")
 
         return token
 
@@ -301,10 +436,10 @@ class WindowsUtils(base.BaseOSUtils):
     def get_user_home(self, username):
         user_sid = self.get_user_sid(username)
         if user_sid:
-            with _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE, 'SOFTWARE\\'
-                                 'Microsoft\\Windows NT\\CurrentVersion\\'
-                                 'ProfileList\\%s' % user_sid) as key:
-                return _winreg.QueryValueEx(key, 'ProfileImagePath')[0]
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 'SOFTWARE\\'
+                                'Microsoft\\Windows NT\\CurrentVersion\\'
+                                'ProfileList\\%s' % user_sid) as key:
+                return winreg.QueryValueEx(key, 'ProfileImagePath')[0]
         LOG.debug('Home directory not found for user \'%s\'' % username)
         return None
 
@@ -314,20 +449,80 @@ class WindowsUtils(base.BaseOSUtils):
     def set_host_name(self, new_host_name):
         ret_val = kernel32.SetComputerNameExW(
             self.ComputerNamePhysicalDnsHostname,
-            unicode(new_host_name))
+            six.text_type(new_host_name))
         if not ret_val:
-            raise Exception("Cannot set host name")
+            raise exception.CloudbaseInitException("Cannot set host name")
 
     def get_network_adapters(self):
         l = []
         conn = wmi.WMI(moniker='//./root/cimv2')
         # Get Ethernet adapters only
-        q = conn.query('SELECT * FROM Win32_NetworkAdapter WHERE '
-                       'AdapterTypeId = 0 AND PhysicalAdapter = True AND '
-                       'MACAddress IS NOT NULL')
+        wql = ('SELECT * FROM Win32_NetworkAdapter WHERE '
+               'AdapterTypeId = 0 AND MACAddress IS NOT NULL')
+
+        if self.check_os_version(6, 0):
+            wql += ' AND PhysicalAdapter = True'
+
+        q = conn.query(wql)
         for r in q:
             l.append(r.Name)
         return l
+
+    def get_dhcp_hosts_in_use(self):
+        dhcp_hosts = []
+        for net_addr in network.get_adapter_addresses():
+            if net_addr["dhcp_enabled"] and net_addr["dhcp_server"]:
+                dhcp_hosts.append((net_addr["mac_address"],
+                                   net_addr["dhcp_server"]))
+        return dhcp_hosts
+
+    def set_ntp_client_config(self, ntp_host):
+        base_dir = self._get_system_dir()
+        w32tm_path = os.path.join(base_dir, "w32tm.exe")
+
+        args = [w32tm_path, '/config', '/manualpeerlist:%s' % ntp_host,
+                '/syncfromflags:manual', '/update']
+
+        (out, err, ret_val) = self.execute_process(args, False)
+        if ret_val:
+            raise exception.CloudbaseInitException(
+                'w32tm failed to configure NTP.\nOutput: %(out)s\nError:'
+                ' %(err)s' % {'out': out, 'err': err})
+
+    def set_network_adapter_mtu(self, mac_address, mtu):
+        if not self.check_os_version(6, 0):
+            raise exception.CloudbaseInitException(
+                'Setting the MTU is currently not supported on Windows XP '
+                'and Windows Server 2003')
+
+        iface_index_list = [
+            net_addr["interface_index"] for net_addr
+            in network.get_adapter_addresses()
+            if net_addr["mac_address"] == mac_address]
+
+        if not iface_index_list:
+            raise exception.CloudbaseInitException(
+                'Network interface with MAC address "%s" not found' %
+                mac_address)
+        else:
+            iface_index = iface_index_list[0]
+
+            LOG.debug('Setting MTU for interface "%(mac_address)s" with '
+                      'value "%(mtu)s"' %
+                      {'mac_address': mac_address, 'mtu': mtu})
+
+            base_dir = self._get_system_dir()
+            netsh_path = os.path.join(base_dir, 'netsh.exe')
+
+            args = [netsh_path, "interface", "ipv4", "set", "subinterface",
+                    str(iface_index), "mtu=%s" % mtu,
+                    "store=persistent"]
+            (out, err, ret_val) = self.execute_process(args, False)
+            if ret_val:
+                raise exception.CloudbaseInitException(
+                    'Setting MTU for interface "%(mac_address)s" with '
+                    'value "%(mtu)s" failed' % {'mac_address': mac_address,
+                                                'mtu': mtu})
 
     def set_static_network_config(self, adapter_name, address, netmask,
                                   broadcast, gateway, dnsnameservers):
@@ -336,9 +531,10 @@ class WindowsUtils(base.BaseOSUtils):
         adapter_name_san = self._sanitize_wmi_input(adapter_name)
         q = conn.query('SELECT * FROM Win32_NetworkAdapter WHERE '
                        'MACAddress IS NOT NULL AND '
-                       'Name = \'%(adapter_name_san)s\'' % locals())
+                       'Name = \'%s\'' % adapter_name_san)
         if not len(q):
-            raise Exception("Network adapter not found")
+            raise exception.CloudbaseInitException(
+                "Network adapter not found")
 
         adapter_config = q[0].associators(
             wmi_result_class='Win32_NetworkAdapterConfiguration')[0]
@@ -346,19 +542,22 @@ class WindowsUtils(base.BaseOSUtils):
         LOG.debug("Setting static IP address")
         (ret_val,) = adapter_config.EnableStatic([address], [netmask])
         if ret_val > 1:
-            raise Exception("Cannot set static IP address on network adapter")
+            raise exception.CloudbaseInitException(
+                "Cannot set static IP address on network adapter")
         reboot_required = (ret_val == 1)
 
         LOG.debug("Setting static gateways")
         (ret_val,) = adapter_config.SetGateways([gateway], [1])
         if ret_val > 1:
-            raise Exception("Cannot set gateway on network adapter")
+            raise exception.CloudbaseInitException(
+                "Cannot set gateway on network adapter")
         reboot_required = reboot_required or ret_val == 1
 
         LOG.debug("Setting static DNS servers")
         (ret_val,) = adapter_config.SetDNSServerSearchOrder(dnsnameservers)
         if ret_val > 1:
-            raise Exception("Cannot set DNS on network adapter")
+            raise exception.CloudbaseInitException(
+                "Cannot set DNS on network adapter")
         reboot_required = reboot_required or ret_val == 1
 
         return reboot_required
@@ -366,67 +565,103 @@ class WindowsUtils(base.BaseOSUtils):
     def _get_config_key_name(self, section):
         key_name = self._config_key
         if section:
-            key_name += section + '\\'
+            key_name += section.replace('/', '\\') + '\\'
         return key_name
 
     def set_config_value(self, name, value, section=None):
         key_name = self._get_config_key_name(section)
 
-        with _winreg.CreateKey(_winreg.HKEY_LOCAL_MACHINE,
-                               key_name) as key:
+        with winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE,
+                              key_name) as key:
             if type(value) == int:
-                regtype = _winreg.REG_DWORD
+                regtype = winreg.REG_DWORD
             else:
-                regtype = _winreg.REG_SZ
-            _winreg.SetValueEx(key, name, 0, regtype, value)
+                regtype = winreg.REG_SZ
+            winreg.SetValueEx(key, name, 0, regtype, value)
 
     def get_config_value(self, name, section=None):
         key_name = self._get_config_key_name(section)
 
         try:
-            with _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE,
-                                 key_name) as key:
-                (value, regtype) = _winreg.QueryValueEx(key, name)
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                key_name) as key:
+                (value, regtype) = winreg.QueryValueEx(key, name)
                 return value
         except WindowsError:
             return None
 
     def wait_for_boot_completion(self):
         try:
-            with _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE,
-                                 "SYSTEM\\Setup\\Status\\SysprepStatus", 0,
-                                 _winreg.KEY_READ) as key:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                "SYSTEM\\Setup\\Status\\SysprepStatus", 0,
+                                winreg.KEY_READ) as key:
                 while True:
-                    gen_state = _winreg.QueryValueEx(key,
-                                                     "GeneralizationState")[0]
+                    gen_state = winreg.QueryValueEx(key,
+                                                    "GeneralizationState")[0]
                     if gen_state == 7:
                         break
                     time.sleep(1)
-                    LOG.debug('Waiting for sysprep completion. '
-                              'GeneralizationState: %d' % gen_state)
-        except WindowsError, ex:
+                    LOG.info('Waiting for sysprep completion. '
+                             'GeneralizationState: %d' % gen_state)
+        except WindowsError as ex:
             if ex.winerror == 2:
                 LOG.debug('Sysprep data not found in the registry, '
                           'skipping sysprep completion check.')
             else:
                 raise ex
 
-    def _stop_service(self, service_name):
-        LOG.debug('Stopping service %s' % service_name)
-
+    def _get_service(self, service_name):
         conn = wmi.WMI(moniker='//./root/cimv2')
-        service = conn.Win32_Service(Name=service_name)[0]
+        service_list = conn.Win32_Service(Name=service_name)
+        if len(service_list):
+            return service_list[0]
 
+    def check_service_exists(self, service_name):
+        return self._get_service(service_name) is not None
+
+    def get_service_status(self, service_name):
+        service = self._get_service(service_name)
+        return service.State
+
+    def get_service_start_mode(self, service_name):
+        service = self._get_service(service_name)
+        return service.StartMode
+
+    def set_service_start_mode(self, service_name, start_mode):
+        # TODO(alexpilotti): Handle the "Delayed Start" case
+        service = self._get_service(service_name)
+        (ret_val,) = service.ChangeStartMode(start_mode)
+        if ret_val != 0:
+            raise exception.CloudbaseInitException(
+                'Setting service %(service_name)s start mode failed with '
+                'return value: %(ret_val)d' % {'service_name': service_name,
+                                               'ret_val': ret_val})
+
+    def start_service(self, service_name):
+        LOG.debug('Starting service %s' % service_name)
+        service = self._get_service(service_name)
+        (ret_val,) = service.StartService()
+        if ret_val != 0:
+            raise exception.CloudbaseInitException(
+                'Starting service %(service_name)s failed with return value: '
+                '%(ret_val)d' % {'service_name': service_name,
+                                 'ret_val': ret_val})
+
+    def stop_service(self, service_name):
+        LOG.debug('Stopping service %s' % service_name)
+        service = self._get_service(service_name)
         (ret_val,) = service.StopService()
         if ret_val != 0:
-            raise Exception('Stopping service %(service_name)s failed with '
-                            'return value: %(ret_val)d' % locals())
+            raise exception.CloudbaseInitException(
+                'Stopping service %(service_name)s failed with return value:'
+                ' %(ret_val)d' % {'service_name': service_name,
+                                  'ret_val': ret_val})
 
     def terminate(self):
         # Wait for the service to start. Polling the service "Started" property
         # is not enough
         time.sleep(3)
-        self._stop_service(self._service_name)
+        self.stop_service(self._service_name)
 
     def get_default_gateway(self):
         default_routes = [r for r in self._get_ipv4_routing_table()
@@ -444,8 +679,8 @@ class WindowsUtils(base.BaseOSUtils):
         size = wintypes.ULONG(ctypes.sizeof(Win32_MIB_IPFORWARDTABLE))
         p = kernel32.HeapAlloc(heap, 0, size)
         if not p:
-            raise Exception('Unable to allocate memory for the IP forward '
-                            'table')
+            raise exception.CloudbaseInitException(
+                'Unable to allocate memory for the IP forward table')
         p_forward_table = ctypes.cast(
             p, ctypes.POINTER(Win32_MIB_IPFORWARDTABLE))
 
@@ -456,8 +691,8 @@ class WindowsUtils(base.BaseOSUtils):
                 kernel32.HeapFree(heap, 0, p_forward_table)
                 p = kernel32.HeapAlloc(heap, 0, size)
                 if not p:
-                    raise Exception('Unable to allocate memory for the IP '
-                                    'forward table')
+                    raise exception.CloudbaseInitException(
+                        'Unable to allocate memory for the IP forward table')
                 p_forward_table = ctypes.cast(
                     p, ctypes.POINTER(Win32_MIB_IPFORWARDTABLE))
 
@@ -465,13 +700,14 @@ class WindowsUtils(base.BaseOSUtils):
                                              ctypes.byref(size), 0)
             if err != self.ERROR_NO_DATA:
                 if err:
-                    raise Exception('Unable to get IP forward table. '
-                                    'Error: %s' % err)
+                    raise exception.CloudbaseInitException(
+                        'Unable to get IP forward table. Error: %s' % err)
 
                 forward_table = p_forward_table.contents
-                table = ctypes.cast(ctypes.addressof(forward_table.table),
-                                    ctypes.POINTER(Win32_MIB_IPFORWARDROW *
-                                    forward_table.dwNumEntries)).contents
+                table = ctypes.cast(
+                    ctypes.addressof(forward_table.table),
+                    ctypes.POINTER(Win32_MIB_IPFORWARDROW *
+                                   forward_table.dwNumEntries)).contents
 
                 i = 0
                 while i < forward_table.dwNumEntries:
@@ -497,8 +733,9 @@ class WindowsUtils(base.BaseOSUtils):
         args = ['ROUTE', 'ADD', destination, 'MASK', mask, next_hop]
         (out, err, ret_val) = self.execute_process(args)
         # Cannot use the return value to determine the outcome
-        if err:
-            raise Exception('Unable to add route: %(err)s' % locals())
+        if ret_val or err:
+            raise exception.CloudbaseInitException(
+                'Unable to add route: %s' % err)
 
     def check_os_version(self, major, minor, build=0):
         vi = Win32_OSVERSIONINFOEX_W()
@@ -523,13 +760,13 @@ class WindowsUtils(base.BaseOSUtils):
             if err == self.ERROR_OLD_WIN_VERSION:
                 return False
             else:
-                raise Exception("VerifyVersionInfo failed with error: %s" %
-                                err)
+                raise exception.CloudbaseInitException(
+                    "VerifyVersionInfo failed with error: %s" % err)
 
     def get_volume_label(self, drive):
         max_label_size = 261
         label = ctypes.create_unicode_buffer(max_label_size)
-        ret_val = kernel32.GetVolumeInformationW(unicode(drive), label,
+        ret_val = kernel32.GetVolumeInformationW(six.text_type(drive), label,
                                                  max_label_size, 0, 0, 0, 0, 0)
         if ret_val:
             return label.value
@@ -546,27 +783,183 @@ class WindowsUtils(base.BaseOSUtils):
             if valid:
                 return pwd
 
-    def _get_logical_drives(self):
-        buf_size = 260
-        buf = ctypes.create_unicode_buffer(buf_size + 1)
-        buf_len = kernel32.GetLogicalDriveStringsW(buf_size, buf)
-        if not buf_len:
-            raise Exception("GetLogicalDriveStringsW failed")
-
-        drives = []
+    def _split_str_buf_list(self, buf, buf_len):
         i = 0
-        drive = ''
+        value = ''
+        values = []
         while i < buf_len:
             c = buf[i]
             if c != '\x00':
-                drive += c
+                value += c
             else:
-                drives.append(drive)
-                drive = ''
+                values.append(value)
+                value = ''
             i += 1
-        return drives
+
+        return values
+
+    def _get_logical_drives(self):
+        buf_size = self.MAX_PATH
+        buf = ctypes.create_unicode_buffer(buf_size + 1)
+        buf_len = kernel32.GetLogicalDriveStringsW(buf_size, buf)
+        if not buf_len:
+            raise exception.CloudbaseInitException(
+                "GetLogicalDriveStringsW failed")
+
+        return self._split_str_buf_list(buf, buf_len)
 
     def get_cdrom_drives(self):
         drives = self._get_logical_drives()
         return [d for d in drives if kernel32.GetDriveTypeW(d) ==
                 self.DRIVE_CDROM]
+
+    def get_physical_disks(self):
+        physical_disks = []
+
+        disk_guid = GUID_DEVINTERFACE_DISK
+        handle_disks = setupapi.SetupDiGetClassDevsW(
+            ctypes.byref(disk_guid), None, None,
+            self.DIGCF_PRESENT | self.DIGCF_DEVICEINTERFACE)
+        if handle_disks == self.INVALID_HANDLE_VALUE:
+            raise exception.CloudbaseInitException(
+                "SetupDiGetClassDevs failed")
+
+        try:
+            did = Win32_SP_DEVICE_INTERFACE_DATA()
+            did.cbSize = ctypes.sizeof(Win32_SP_DEVICE_INTERFACE_DATA)
+
+            index = 0
+            while setupapi.SetupDiEnumDeviceInterfaces(
+                    handle_disks, None, ctypes.byref(disk_guid), index,
+                    ctypes.byref(did)):
+                index += 1
+                handle_disk = self.INVALID_HANDLE_VALUE
+
+                required_size = wintypes.DWORD()
+                if not setupapi.SetupDiGetDeviceInterfaceDetailW(
+                        handle_disks, ctypes.byref(did), None, 0,
+                        ctypes.byref(required_size), None):
+                    if (kernel32.GetLastError() !=
+                            self.ERROR_INSUFFICIENT_BUFFER):
+                        raise exception.CloudbaseInitException(
+                            "SetupDiGetDeviceInterfaceDetailW failed")
+
+                pdidd = ctypes.cast(
+                    msvcrt.malloc(required_size),
+                    ctypes.POINTER(Win32_SP_DEVICE_INTERFACE_DETAIL_DATA_W))
+
+                try:
+                    # NOTE(alexpilotti): the size provided by ctypes.sizeof
+                    # is not the expected one
+                    # pdidd.contents.cbSize = ctypes.sizeof(
+                    #    Win32_SP_DEVICE_INTERFACE_DETAIL_DATA_W)
+                    pdidd.contents.cbSize = 6
+
+                    if not setupapi.SetupDiGetDeviceInterfaceDetailW(
+                            handle_disks, ctypes.byref(did), pdidd,
+                            required_size, None, None):
+                        raise exception.CloudbaseInitException(
+                            "SetupDiGetDeviceInterfaceDetailW failed")
+
+                    device_path = ctypes.cast(
+                        pdidd.contents.DevicePath, wintypes.LPWSTR).value
+
+                    handle_disk = kernel32.CreateFileW(
+                        device_path, 0, self.FILE_SHARE_READ,
+                        None, self.OPEN_EXISTING, 0, 0)
+                    if handle_disk == self.INVALID_HANDLE_VALUE:
+                        raise exception.CloudbaseInitException(
+                            'CreateFileW failed')
+
+                    sdn = Win32_STORAGE_DEVICE_NUMBER()
+
+                    b = wintypes.DWORD()
+                    if not kernel32.DeviceIoControl(
+                            handle_disk, self.IOCTL_STORAGE_GET_DEVICE_NUMBER,
+                            None, 0, ctypes.byref(sdn), ctypes.sizeof(sdn),
+                            ctypes.byref(b), None):
+                        raise exception.CloudbaseInitException(
+                            'DeviceIoControl failed')
+
+                    physical_disks.append(
+                        r"\\.\PHYSICALDRIVE%d" % sdn.DeviceNumber)
+                finally:
+                    msvcrt.free(pdidd)
+                    if handle_disk != self.INVALID_HANDLE_VALUE:
+                        kernel32.CloseHandle(handle_disk)
+        finally:
+            setupapi.SetupDiDestroyDeviceInfoList(handle_disks)
+
+        return physical_disks
+
+    def _get_fw_protocol(self, protocol):
+        if protocol == self.PROTOCOL_TCP:
+            fw_protocol = self._FW_IP_PROTOCOL_TCP
+        elif protocol == self.PROTOCOL_UDP:
+            fw_protocol = self._FW_IP_PROTOCOL_UDP
+        else:
+            raise NotImplementedError("Unsupported protocol")
+        return fw_protocol
+
+    def firewall_create_rule(self, name, port, protocol, allow=True):
+        if not allow:
+            raise NotImplementedError()
+
+        fw_port = client.Dispatch("HNetCfg.FWOpenPort")
+        fw_port.Name = name
+        fw_port.Protocol = self._get_fw_protocol(protocol)
+        fw_port.Port = port
+        fw_port.Scope = self._FW_SCOPE_ALL
+        fw_port.Enabled = True
+
+        fw_mgr = client.Dispatch("HNetCfg.FwMgr")
+        fw_profile = fw_mgr.LocalPolicy.CurrentProfile
+        fw_profile = fw_profile.GloballyOpenPorts.Add(fw_port)
+
+    def firewall_remove_rule(self, name, port, protocol, allow=True):
+        if not allow:
+            raise NotImplementedError()
+
+        fw_mgr = client.Dispatch("HNetCfg.FwMgr")
+        fw_profile = fw_mgr.LocalPolicy.CurrentProfile
+
+        fw_protocol = self._get_fw_protocol(protocol)
+        fw_profile = fw_profile.GloballyOpenPorts.Remove(port, fw_protocol)
+
+    def is_wow64(self):
+        ret_val = wintypes.BOOL()
+        if not kernel32.IsWow64Process(kernel32.GetCurrentProcess(),
+                                       ctypes.byref(ret_val)):
+            raise exception.CloudbaseInitException("IsWow64Process failed")
+        return bool(ret_val.value)
+
+    def get_system32_dir(self):
+        return os.path.expandvars('%windir%\\system32')
+
+    def get_sysnative_dir(self):
+        return os.path.expandvars('%windir%\\sysnative')
+
+    def check_sysnative_dir_exists(self):
+        sysnative_dir_exists = os.path.isdir(self.get_sysnative_dir())
+        if not sysnative_dir_exists and self.is_wow64():
+            LOG.warning('Unable to validate sysnative folder presence. '
+                        'If Target OS is Server 2003 x64, please ensure '
+                        'you have KB942589 installed')
+        return sysnative_dir_exists
+
+    def _get_system_dir(self, sysnative=True):
+        if sysnative and self.check_sysnative_dir_exists():
+            return self.get_sysnative_dir()
+        else:
+            return self.get_system32_dir()
+
+    def execute_powershell_script(self, script_path, sysnative=True):
+        base_dir = self._get_system_dir(sysnative)
+        powershell_path = os.path.join(base_dir,
+                                       'WindowsPowerShell\\v1.0\\'
+                                       'powershell.exe')
+
+        args = [powershell_path, '-ExecutionPolicy', 'RemoteSigned',
+                '-NonInteractive', '-File', script_path]
+
+        return self.execute_process(args, False)

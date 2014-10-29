@@ -16,28 +16,32 @@
 
 import os
 
-from cloudbaseinit.openstack.common import cfg
+from oslo.config import cfg
+
+from cloudbaseinit import exception
 from cloudbaseinit.openstack.common import log as logging
 from cloudbaseinit.osutils import factory as osutils_factory
 from cloudbaseinit.plugins import base
 
 CONF = cfg.CONF
+CONF.import_opt('username', 'cloudbaseinit.plugins.windows.createuser')
 LOG = logging.getLogger(__name__)
 
 
 class SetUserSSHPublicKeysPlugin(base.BasePlugin):
-    def execute(self, service):
-        meta_data = service.get_meta_data('openstack')
-        if not 'public_keys' in meta_data:
+    def execute(self, service, shared_data):
+        public_keys = service.get_public_keys()
+        if not public_keys:
+            LOG.debug('Public keys not found in metadata')
             return (base.PLUGIN_EXECUTION_DONE, False)
 
         username = CONF.username
 
-        osutils = osutils_factory.OSUtilsFactory().get_os_utils()
+        osutils = osutils_factory.get_os_utils()
         user_home = osutils.get_user_home(username)
 
         if not user_home:
-            raise Exception("User profile not found!")
+            raise exception.CloudbaseInitException("User profile not found!")
 
         LOG.debug("User home: %s" % user_home)
 
@@ -46,9 +50,9 @@ class SetUserSSHPublicKeysPlugin(base.BasePlugin):
             os.makedirs(user_ssh_dir)
 
         authorized_keys_path = os.path.join(user_ssh_dir, "authorized_keys")
+        LOG.info("Writing SSH public keys in: %s" % authorized_keys_path)
         with open(authorized_keys_path, 'w') as f:
-            public_keys = meta_data['public_keys']
-            for k in public_keys:
-                f.write(public_keys[k])
+            for public_key in public_keys:
+                f.write(public_key)
 
         return (base.PLUGIN_EXECUTION_DONE, False)

@@ -1,4 +1,4 @@
-# Copyright 2011 OpenStack LLC.
+# Copyright 2011 OpenStack Foundation.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -13,11 +13,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import socket
 import uuid
 
-from cloudbaseinit.openstack.common import cfg
+from oslo.config import cfg
+
 from cloudbaseinit.openstack.common import context
-from cloudbaseinit.openstack.common.gettextutils import _
+from cloudbaseinit.openstack.common.gettextutils import _, _LE
 from cloudbaseinit.openstack.common import importutils
 from cloudbaseinit.openstack.common import jsonutils
 from cloudbaseinit.openstack.common import log as logging
@@ -29,13 +31,11 @@ LOG = logging.getLogger(__name__)
 notifier_opts = [
     cfg.MultiStrOpt('notification_driver',
                     default=[],
-                    deprecated_name='list_notifier_drivers',
                     help='Driver or drivers to handle sending notifications'),
     cfg.StrOpt('default_notification_level',
                default='INFO',
                help='Default notification level for outgoing notifications'),
     cfg.StrOpt('default_publisher_id',
-               default='$host',
                help='Default publisher_id for outgoing notifications'),
 ]
 
@@ -56,7 +56,7 @@ class BadPriorityException(Exception):
 
 
 def notify_decorator(name, fn):
-    """ decorator for notify which is used from utils.monkey_patch()
+    """Decorator for notify which is used from utils.monkey_patch().
 
         :param name: name of the function
         :param function: - object of the function
@@ -74,7 +74,7 @@ def notify_decorator(name, fn):
 
         ctxt = context.get_context_from_function_and_args(fn, args, kwarg)
         notify(ctxt,
-               CONF.default_publisher_id,
+               CONF.default_publisher_id or socket.gethostname(),
                name,
                CONF.default_notification_level,
                body)
@@ -84,7 +84,10 @@ def notify_decorator(name, fn):
 
 def publisher_id(service, host=None):
     if not host:
-        host = CONF.host
+        try:
+            host = CONF.host
+        except AttributeError:
+            host = CONF.default_publisher_id or socket.gethostname()
     return "%s.%s" % (service, host)
 
 
@@ -138,9 +141,9 @@ def notify(context, publisher_id, event_type, priority, payload):
         try:
             driver.notify(context, msg)
         except Exception as e:
-            LOG.exception(_("Problem '%(e)s' attempting to "
-                            "send to notification system. "
-                            "Payload=%(payload)s")
+            LOG.exception(_LE("Problem '%(e)s' attempting to "
+                              "send to notification system. "
+                              "Payload=%(payload)s")
                           % dict(e=e, payload=payload))
 
 
@@ -153,27 +156,14 @@ def _get_drivers():
     if _drivers is None:
         _drivers = {}
         for notification_driver in CONF.notification_driver:
-            add_driver(notification_driver)
-
+            try:
+                driver = importutils.import_module(notification_driver)
+                _drivers[notification_driver] = driver
+            except ImportError:
+                LOG.exception(_LE("Failed to load notifier %s. "
+                                  "These notifications will not be sent.") %
+                              notification_driver)
     return _drivers.values()
-
-
-def add_driver(notification_driver):
-    """Add a notification driver at runtime."""
-    # Make sure the driver list is initialized.
-    _get_drivers()
-    if isinstance(notification_driver, basestring):
-        # Load and add
-        try:
-            driver = importutils.import_module(notification_driver)
-            _drivers[notification_driver] = driver
-        except ImportError:
-            LOG.exception(_("Failed to load notifier %s. "
-                            "These notifications will not be sent.") %
-                          notification_driver)
-    else:
-        # Driver is already loaded; just add the object.
-        _drivers[notification_driver] = notification_driver
 
 
 def _reset_drivers():

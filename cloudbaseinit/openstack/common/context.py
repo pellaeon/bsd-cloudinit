@@ -1,6 +1,4 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
-# Copyright 2011 OpenStack LLC.
+# Copyright 2011 OpenStack Foundation.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -27,39 +25,75 @@ import uuid
 
 
 def generate_request_id():
-    return 'req-' + str(uuid.uuid4())
+    return b'req-' + str(uuid.uuid4()).encode('ascii')
 
 
 class RequestContext(object):
 
-    """
+    """Helper class to represent useful information about a request context.
+
     Stores information about the security context under which the user
     accesses the system, as well as additional request information.
     """
 
-    def __init__(self, auth_tok=None, user=None, tenant=None, is_admin=False,
-                 read_only=False, show_deleted=False, request_id=None):
-        self.auth_tok = auth_tok
+    user_idt_format = '{user} {tenant} {domain} {user_domain} {p_domain}'
+
+    def __init__(self, auth_token=None, user=None, tenant=None, domain=None,
+                 user_domain=None, project_domain=None, is_admin=False,
+                 read_only=False, show_deleted=False, request_id=None,
+                 instance_uuid=None):
+        self.auth_token = auth_token
         self.user = user
         self.tenant = tenant
+        self.domain = domain
+        self.user_domain = user_domain
+        self.project_domain = project_domain
         self.is_admin = is_admin
         self.read_only = read_only
         self.show_deleted = show_deleted
+        self.instance_uuid = instance_uuid
         if not request_id:
             request_id = generate_request_id()
         self.request_id = request_id
 
     def to_dict(self):
+        user_idt = (
+            self.user_idt_format.format(user=self.user or '-',
+                                        tenant=self.tenant or '-',
+                                        domain=self.domain or '-',
+                                        user_domain=self.user_domain or '-',
+                                        p_domain=self.project_domain or '-'))
+
         return {'user': self.user,
                 'tenant': self.tenant,
+                'domain': self.domain,
+                'user_domain': self.user_domain,
+                'project_domain': self.project_domain,
                 'is_admin': self.is_admin,
                 'read_only': self.read_only,
                 'show_deleted': self.show_deleted,
-                'auth_token': self.auth_tok,
-                'request_id': self.request_id}
+                'auth_token': self.auth_token,
+                'request_id': self.request_id,
+                'instance_uuid': self.instance_uuid,
+                'user_identity': user_idt}
+
+    @classmethod
+    def from_dict(cls, ctx):
+        return cls(
+            auth_token=ctx.get("auth_token"),
+            user=ctx.get("user"),
+            tenant=ctx.get("tenant"),
+            domain=ctx.get("domain"),
+            user_domain=ctx.get("user_domain"),
+            project_domain=ctx.get("project_domain"),
+            is_admin=ctx.get("is_admin", False),
+            read_only=ctx.get("read_only", False),
+            show_deleted=ctx.get("show_deleted", False),
+            request_id=ctx.get("request_id"),
+            instance_uuid=ctx.get("instance_uuid"))
 
 
-def get_admin_context(show_deleted="no"):
+def get_admin_context(show_deleted=False):
     context = RequestContext(None,
                              tenant=None,
                              is_admin=True,
@@ -79,3 +113,14 @@ def get_context_from_function_and_args(function, args, kwargs):
             return arg
 
     return None
+
+
+def is_user_context(context):
+    """Indicates if the request context is a normal user."""
+    if not context:
+        return False
+    if context.is_admin:
+        return False
+    if not context.user_id or not context.project_id:
+        return False
+    return True

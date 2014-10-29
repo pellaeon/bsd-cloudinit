@@ -16,7 +16,12 @@
 
 from cloudbaseinit.utils import classloader
 
-class OSUtilsFactory(object):
-    def get_os_utils(self):
-        cl = classloader.ClassLoader()
-        return cl.load_class('cloudbaseinit.osutils.freebsd.FreeBSDUtils')()
+#TODO: fix for FreeBSD
+def get_os_utils():
+    osutils_class_paths = {
+        'nt': 'cloudbaseinit.osutils.windows.WindowsUtils',
+        'posix': 'cloudbaseinit.osutils.posix.PosixUtils'
+    }
+
+    cl = classloader.ClassLoader()
+    return cl.load_class(osutils_class_paths[os.name])()

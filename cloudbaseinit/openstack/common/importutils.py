@@ -1,6 +1,4 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
-# Copyright 2011 OpenStack LLC.
+# Copyright 2011 OpenStack Foundation.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -24,12 +22,12 @@ import traceback
 
 
 def import_class(import_str):
-    """Returns a class from a string including module and class"""
+    """Returns a class from a string including module and class."""
     mod_str, _sep, class_str = import_str.rpartition('.')
+    __import__(mod_str)
     try:
-        __import__(mod_str)
         return getattr(sys.modules[mod_str], class_str)
-    except (ValueError, AttributeError):
+    except AttributeError:
         raise ImportError('Class %s cannot be found (%s)' %
                           (class_str,
                            traceback.format_exception(*sys.exc_info())))
@@ -41,8 +39,9 @@ def import_object(import_str, *args, **kwargs):
 
 
 def import_object_ns(name_space, import_str, *args, **kwargs):
-    """
-    Import a class and return an instance of it, first by trying
+    """Tries to import object from default namespace.
+
+    Imports a class and return an instance of it, first by trying
     to find the class in a default namespace, then failing back to
     a full path if not found in the default namespace.
     """
@@ -57,3 +56,18 @@ def import_module(import_str):
     """Import a module."""
     __import__(import_str)
     return sys.modules[import_str]
+
+
+def import_versioned_module(version, submodule=None):
+    module = 'cloudbaseinit.v%s' % version
+    if submodule:
+        module = '.'.join((module, submodule))
+    return import_module(module)
+
+
+def try_import(import_str, default=None):
+    """Try to import a module and if it fails return default."""
+    try:
+        return import_module(import_str)
+    except ImportError:
+        return default

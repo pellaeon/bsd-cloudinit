@@ -1,4 +1,4 @@
-# Copyright 2011 OpenStack LLC.
+# Copyright 2011 OpenStack Foundation.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -13,8 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from oslo.config import cfg
 
-from cloudbaseinit.openstack.common import cfg
 from cloudbaseinit.openstack.common import jsonutils
 from cloudbaseinit.openstack.common import log as logging
 
@@ -24,7 +24,9 @@ CONF = cfg.CONF
 
 def notify(_context, message):
     """Notifies the recipient of the desired event given the model.
-    Log notifications using openstack's default logging system"""
+
+    Log notifications using OpenStack's default logging system.
+    """
 
     priority = message.get('priority',
                            CONF.default_notification_level)

@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2010 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # All Rights Reserved.
@@ -25,8 +23,13 @@ For some wrappers that add message versioning to rpc, see:
     rpc.proxy
 """
 
-from cloudbaseinit.openstack.common import cfg
+from oslo.config import cfg
+
 from cloudbaseinit.openstack.common import importutils
+from cloudbaseinit.openstack.common import log as logging
+
+
+LOG = logging.getLogger(__name__)
 
 
 rpc_opts = [
@@ -47,26 +50,27 @@ rpc_opts = [
                help='Seconds to wait before a cast expires (TTL). '
                     'Only supported by impl_zmq.'),
     cfg.ListOpt('allowed_rpc_exception_modules',
-                default=['cloudbaseinit.openstack.common.exception',
-                         'nova.exception',
+                default=['nova.exception',
                          'cinder.exception',
+                         'exceptions',
                          ],
                 help='Modules of exceptions that are permitted to be recreated'
-                     'upon receiving exception data from an rpc call.'),
+                     ' upon receiving exception data from an rpc call.'),
     cfg.BoolOpt('fake_rabbit',
                 default=False,
                 help='If passed, use a fake RabbitMQ provider'),
-    #
-    # The following options are not registered here, but are expected to be
-    # present. The project using this library must register these options with
-    # the configuration so that project-specific defaults may be defined.
-    #
-    #cfg.StrOpt('control_exchange',
-    #           default='nova',
-    #           help='AMQP exchange to connect to if using RabbitMQ or Qpid'),
+    cfg.StrOpt('control_exchange',
+               default='openstack',
+               help='AMQP exchange to connect to if using RabbitMQ or Qpid'),
 ]
 
-cfg.CONF.register_opts(rpc_opts)
+CONF = cfg.CONF
+CONF.register_opts(rpc_opts)
+
+
+def set_defaults(control_exchange):
+    cfg.set_defaults(rpc_opts,
+                     control_exchange=control_exchange)
 
 
 def create_connection(new=True):
@@ -82,7 +86,7 @@ def create_connection(new=True):
 
     :returns: An instance of openstack.common.rpc.common.Connection
     """
-    return _get_impl().create_connection(cfg.CONF, new=new)
+    return _get_impl().create_connection(CONF, new=new)
 
 
 def call(context, topic, msg, timeout=None):
@@ -105,7 +109,7 @@ def call(context, topic, msg, timeout=None):
     :raises: openstack.common.rpc.common.Timeout if a complete response
              is not received before the timeout is reached.
     """
-    return _get_impl().call(cfg.CONF, context, topic, msg, timeout)
+    return _get_impl().call(CONF, context, topic, msg, timeout)
 
 
 def cast(context, topic, msg):
@@ -123,7 +127,7 @@ def cast(context, topic, msg):
 
     :returns: None
     """
-    return _get_impl().cast(cfg.CONF, context, topic, msg)
+    return _get_impl().cast(CONF, context, topic, msg)
 
 
 def fanout_cast(context, topic, msg):
@@ -144,7 +148,7 @@ def fanout_cast(context, topic, msg):
 
     :returns: None
     """
-    return _get_impl().fanout_cast(cfg.CONF, context, topic, msg)
+    return _get_impl().fanout_cast(CONF, context, topic, msg)
 
 
 def multicall(context, topic, msg, timeout=None):
@@ -174,24 +178,25 @@ def multicall(context, topic, msg, timeout=None):
     :raises: openstack.common.rpc.common.Timeout if a complete response
              is not received before the timeout is reached.
     """
-    return _get_impl().multicall(cfg.CONF, context, topic, msg, timeout)
+    return _get_impl().multicall(CONF, context, topic, msg, timeout)
 
 
-def notify(context, topic, msg):
+def notify(context, topic, msg, envelope=False):
     """Send notification event.
 
     :param context: Information that identifies the user that has made this
                     request.
     :param topic: The topic to send the notification to.
     :param msg: This is a dict of content of event.
+    :param envelope: Set to True to enable message envelope for notifications.
 
     :returns: None
     """
-    return _get_impl().notify(cfg.CONF, context, topic, msg)
+    return _get_impl().notify(cfg.CONF, context, topic, msg, envelope)
 
 
 def cleanup():
-    """Clean up resoruces in use by implementation.
+    """Clean up resources in use by implementation.
 
     Clean up any resources that have been allocated by the RPC implementation.
     This is typically open connections to a messaging service.  This function
@@ -215,7 +220,7 @@ def cast_to_server(context, server_params, topic, msg):
 
     :returns: None
     """
-    return _get_impl().cast_to_server(cfg.CONF, context, server_params, topic,
+    return _get_impl().cast_to_server(CONF, context, server_params, topic,
                                       msg)
 
 
@@ -231,7 +236,7 @@ def fanout_cast_to_server(context, server_params, topic, msg):
 
     :returns: None
     """
-    return _get_impl().fanout_cast_to_server(cfg.CONF, context, server_params,
+    return _get_impl().fanout_cast_to_server(CONF, context, server_params,
                                              topic, msg)
 
 
@@ -261,10 +266,10 @@ def _get_impl():
     global _RPCIMPL
     if _RPCIMPL is None:
         try:
-            _RPCIMPL = importutils.import_module(cfg.CONF.rpc_backend)
+            _RPCIMPL = importutils.import_module(CONF.rpc_backend)
         except ImportError:
             # For backwards compatibility with older nova config.
-            impl = cfg.CONF.rpc_backend.replace('nova.rpc',
-                                                'nova.openstack.common.rpc')
+            impl = CONF.rpc_backend.replace('nova.rpc',
+                                            'nova.openstack.common.rpc')
             _RPCIMPL = importutils.import_module(impl)
     return _RPCIMPL

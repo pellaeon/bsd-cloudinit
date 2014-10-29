@@ -25,5 +25,5 @@ class BasePlugin(object):
     def get_os_requirements(self):
         return (None, None)
 
-    def execute(self, service):
+    def execute(self, service, shared_data):
         pass

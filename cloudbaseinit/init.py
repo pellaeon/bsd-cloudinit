@@ -16,8 +16,9 @@
 
 import sys
 
+from oslo.config import cfg
+
 from cloudbaseinit.metadata import factory as metadata_factory
-from cloudbaseinit.openstack.common import cfg
 from cloudbaseinit.openstack.common import log as logging
 from cloudbaseinit.osutils import factory as osutils_factory
 from cloudbaseinit.plugins import base as plugins_base
@@ -40,31 +41,38 @@ LOG = logging.getLogger(__name__)
 class InitManager(object):
     _PLUGINS_CONFIG_SECTION = 'Plugins'
 
-    def _get_plugin_status(self, osutils, plugin_name):
+    def _get_plugins_section(self, instance_id):
+        if not instance_id:
+            return self._PLUGINS_CONFIG_SECTION
+        else:
+            return instance_id + "/" + self._PLUGINS_CONFIG_SECTION
+
+    def _get_plugin_status(self, osutils, instance_id, plugin_name):
         return osutils.get_config_value(plugin_name,
-                                        self._PLUGINS_CONFIG_SECTION)
+                                        self._get_plugins_section(instance_id))
 
-    def _set_plugin_status(self, osutils, plugin_name, status):
+    def _set_plugin_status(self, osutils, instance_id, plugin_name, status):
         osutils.set_config_value(plugin_name, status,
-                                 self._PLUGINS_CONFIG_SECTION)
+                                 self._get_plugins_section(instance_id))
 
-    def _exec_plugin(self, osutils, service, plugin):
+    def _exec_plugin(self, osutils, service, plugin, instance_id, shared_data):
         plugin_name = plugin.get_name()
 
-        status = self._get_plugin_status(osutils, plugin_name)
+        status = self._get_plugin_status(osutils, instance_id, plugin_name)
         if status == plugins_base.PLUGIN_EXECUTION_DONE:
-            LOG.debug('Plugin \'%(plugin_name)s\' execution already done, '
-                      'skipping' % locals())
+            LOG.debug('Plugin \'%s\' execution already done, skipping',
+                      plugin_name)
         else:
-            LOG.info('Executing plugin \'%(plugin_name)s\'' %
-                     locals())
+            LOG.info('Executing plugin \'%s\'', plugin_name)
             try:
-                (status, reboot_required) = plugin.execute(service)
-                self._set_plugin_status(osutils, plugin_name, status)
+                (status, reboot_required) = plugin.execute(service,
+                                                           shared_data)
+                self._set_plugin_status(osutils, instance_id, plugin_name,
+                                        status)
                 return reboot_required
-            except Exception, ex:
-                LOG.error('plugin \'%(plugin_name)s\' failed '
-                          'with error \'%(ex)s\'' % locals())
+            except Exception as ex:
+                LOG.error('plugin \'%(plugin_name)s\' failed with error '
+                          '\'%(ex)s\'', {'plugin_name': plugin_name, 'ex': ex})
                 LOG.exception(ex)
 
     def _check_plugin_os_requirements(self, osutils, plugin):
@@ -88,21 +96,25 @@ class InitManager(object):
         return supported
 
     def configure_host(self):
-        osutils = osutils_factory.OSUtilsFactory().get_os_utils()
+        osutils = osutils_factory.get_os_utils()
         osutils.wait_for_boot_completion()
 
-        mdsf = metadata_factory.MetadataServiceFactory()
-        service = mdsf.get_metadata_service()
+        service = metadata_factory.get_metadata_service()
         LOG.info('Metadata service loaded: \'%s\'' %
                  service.get_name())
 
-        plugins = plugins_factory.PluginFactory().load_plugins()
+        instance_id = service.get_instance_id()
+        LOG.debug('Instance id: %s', instance_id)
+
+        plugins = plugins_factory.load_plugins()
+        plugins_shared_data = {}
 
         reboot_required = False
         try:
             for plugin in plugins:
                 if self._check_plugin_os_requirements(osutils, plugin):
-                    if self._exec_plugin(osutils, service, plugin):
+                    if self._exec_plugin(osutils, service, plugin,
+                                         instance_id, plugins_shared_data):
                         reboot_required = True
                         if CONF.allow_reboot:
                             break
@@ -112,7 +124,7 @@ class InitManager(object):
         if reboot_required and CONF.allow_reboot:
             try:
                 osutils.reboot()
-            except Exception, ex:
+            except Exception as ex:
                 LOG.error('reboot failed with error \'%s\'' % ex)
         elif CONF.stop_service_on_exit:
             osutils.terminate()

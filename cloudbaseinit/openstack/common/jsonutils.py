@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2010 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # Copyright 2011 Justin Santa Barbara
@@ -33,16 +31,53 @@ This module provides a few things:
 '''
 
 
+import codecs
 import datetime
+import functools
 import inspect
 import itertools
-import json
-import xmlrpclib
+import sys
 
+is_simplejson = False
+if sys.version_info < (2, 7):
+    # On Python <= 2.6, json module is not C boosted, so try to use
+    # simplejson module if available
+    try:
+        import simplejson as json
+        # NOTE(mriedem): Make sure we have a new enough version of simplejson
+        # to support the namedobject_as_tuple argument. This can be removed
+        # in the Kilo release when python 2.6 support is dropped.
+        if 'namedtuple_as_object' in inspect.getargspec(json.dumps).args:
+            is_simplejson = True
+        else:
+            import json
+    except ImportError:
+        import json
+else:
+    import json
+
+import six
+import six.moves.xmlrpc_client as xmlrpclib
+
+from cloudbaseinit.openstack.common import gettextutils
+from cloudbaseinit.openstack.common import importutils
+from cloudbaseinit.openstack.common import strutils
 from cloudbaseinit.openstack.common import timeutils
 
+netaddr = importutils.try_import("netaddr")
 
-def to_primitive(value, convert_instances=False, level=0):
+_nasty_type_tests = [inspect.ismodule, inspect.isclass, inspect.ismethod,
+                     inspect.isfunction, inspect.isgeneratorfunction,
+                     inspect.isgenerator, inspect.istraceback, inspect.isframe,
+                     inspect.iscode, inspect.isbuiltin, inspect.isroutine,
+                     inspect.isabstract]
+
+_simple_types = (six.string_types + six.integer_types
+                 + (type(None), bool, float))
+
+
+def to_primitive(value, convert_instances=False, convert_datetime=True,
+                 level=0, max_depth=3):
     """Convert a complex object into primitives.
 
     Handy for JSON serialization. We can optionally handle instances,
@@ -56,19 +91,32 @@ def to_primitive(value, convert_instances=False, level=0):
     Therefore, convert_instances=True is lossy ... be aware.
 
     """
-    nasty = [inspect.ismodule, inspect.isclass, inspect.ismethod,
-             inspect.isfunction, inspect.isgeneratorfunction,
-             inspect.isgenerator, inspect.istraceback, inspect.isframe,
-             inspect.iscode, inspect.isbuiltin, inspect.isroutine,
-             inspect.isabstract]
-    for test in nasty:
-        if test(value):
-            return unicode(value)
+    # handle obvious types first - order of basic types determined by running
+    # full tests on nova project, resulting in the following counts:
+    # 572754 <type 'NoneType'>
+    # 460353 <type 'int'>
+    # 379632 <type 'unicode'>
+    # 274610 <type 'str'>
+    # 199918 <type 'dict'>
+    # 114200 <type 'datetime.datetime'>
+    #  51817 <type 'bool'>
+    #  26164 <type 'list'>
+    #   6491 <type 'float'>
+    #    283 <type 'tuple'>
+    #     19 <type 'long'>
+    if isinstance(value, _simple_types):
+        return value
 
-    # value of itertools.count doesn't get caught by inspects
-    # above and results in infinite loop when list(value) is called.
+    if isinstance(value, datetime.datetime):
+        if convert_datetime:
+            return timeutils.strtime(value)
+        else:
+            return value
+
+    # value of itertools.count doesn't get caught by nasty_type_tests
+    # and results in infinite loop when list(value) is called.
     if type(value) == itertools.count:
-        return unicode(value)
+        return six.text_type(value)
 
     # FIXME(vish): Workaround for LP bug 852095. Without this workaround,
     #              tests that raise an exception in a mocked method that
@@ -78,64 +126,70 @@ def to_primitive(value, convert_instances=False, level=0):
     if getattr(value, '__module__', None) == 'mox':
         return 'mock'
 
-    if level > 3:
+    if level > max_depth:
         return '?'
 
     # The try block may not be necessary after the class check above,
     # but just in case ...
     try:
+        recursive = functools.partial(to_primitive,
+                                      convert_instances=convert_instances,
+                                      convert_datetime=convert_datetime,
+                                      level=level,
+                                      max_depth=max_depth)
+        if isinstance(value, dict):
+            return dict((k, recursive(v)) for k, v in six.iteritems(value))
+        elif isinstance(value, (list, tuple)):
+            return [recursive(lv) for lv in value]
+
         # It's not clear why xmlrpclib created their own DateTime type, but
         # for our purposes, make it a datetime type which is explicitly
         # handled
         if isinstance(value, xmlrpclib.DateTime):
             value = datetime.datetime(*tuple(value.timetuple())[:6])
 
-        if isinstance(value, (list, tuple)):
-            o = []
-            for v in value:
-                o.append(to_primitive(v, convert_instances=convert_instances,
-                                      level=level))
-            return o
-        elif isinstance(value, dict):
-            o = {}
-            for k, v in value.iteritems():
-                o[k] = to_primitive(v, convert_instances=convert_instances,
-                                    level=level)
-            return o
-        elif isinstance(value, datetime.datetime):
+        if convert_datetime and isinstance(value, datetime.datetime):
             return timeutils.strtime(value)
+        elif isinstance(value, gettextutils.Message):
+            return value.data
         elif hasattr(value, 'iteritems'):
-            return to_primitive(dict(value.iteritems()),
-                                convert_instances=convert_instances,
-                                level=level + 1)
+            return recursive(dict(value.iteritems()), level=level + 1)
         elif hasattr(value, '__iter__'):
-            return to_primitive(list(value),
-                                convert_instances=convert_instances,
-                                level=level)
+            return recursive(list(value))
         elif convert_instances and hasattr(value, '__dict__'):
             # Likely an instance of something. Watch for cycles.
             # Ignore class member vars.
-            return to_primitive(value.__dict__,
-                                convert_instances=convert_instances,
-                                level=level + 1)
+            return recursive(value.__dict__, level=level + 1)
+        elif netaddr and isinstance(value, netaddr.IPAddress):
+            return six.text_type(value)
         else:
+            if any(test(value) for test in _nasty_type_tests):
+                return six.text_type(value)
             return value
     except TypeError:
         # Class objects are tricky since they may define something like
         # __iter__ defined but it isn't callable as list().
-        return unicode(value)
+        return six.text_type(value)
 
 
 def dumps(value, default=to_primitive, **kwargs):
+    if is_simplejson:
+        kwargs['namedtuple_as_object'] = False
     return json.dumps(value, default=default, **kwargs)
 
 
-def loads(s):
-    return json.loads(s)
+def dump(obj, fp, *args, **kwargs):
+    if is_simplejson:
+        kwargs['namedtuple_as_object'] = False
+    return json.dump(obj, fp, *args, **kwargs)
 
 
-def load(s):
-    return json.load(s)
+def loads(s, encoding='utf-8', **kwargs):
+    return json.loads(strutils.safe_decode(s, encoding), **kwargs)
+
+
+def load(fp, encoding='utf-8', **kwargs):
+    return json.load(codecs.getreader(encoding)(fp), **kwargs)
 
 
 try:

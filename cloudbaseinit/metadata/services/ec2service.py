@@ -1,5 +1,4 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
+# Copyright 2014 Cloudbase Solutions Srl
 # Copyright 2012 Mirantis Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -15,28 +14,22 @@
 #    under the License.
 
 import posixpath
-import urllib2
-import traceback
-import os
+
+from oslo.config import cfg
+from six.moves.urllib import error
+from six.moves.urllib import request
 
 from cloudbaseinit.metadata.services import base
-from cloudbaseinit.openstack.common import cfg
 from cloudbaseinit.openstack.common import log as logging
+from cloudbaseinit.utils import network
 
 opts = [
     cfg.StrOpt('ec2_metadata_base_url',
-               default='http://169.254.169.254/2009-04-04/',
+               default='http://169.254.169.254/',
                help='The base URL where the service looks for metadata'),
+    cfg.BoolOpt('ec2_add_metadata_private_ip_route', default=True,
+                help='Add a route for the metadata ip address to the gateway'),
 ]
-
-ec2nodes = [
-    'ami-id', 'ami-launch-index', 'ami-manifest-path', 'ancestor-ami-ids',
-    'hostname', 'block-device-mapping', 'kernel-id',
-    'placement/availability-zone', 'instance-action', 'instance-id',
-    'instance-type', 'product-codes', 'local-hostname', 'local-ipv4',
-    'public-hostname', 'public-ipv4', 'ramdisk-id', 'reservation-id',
-    'security-groups', 'public-keys/', 'public-keys/0/',
-    'public-keys/0/openssh-key', 'admin_pass']
 
 CONF = cfg.CONF
 CONF.register_opts(opts)
@@ -45,79 +38,69 @@ LOG = logging.getLogger(__name__)
 
 
 class EC2Service(base.BaseMetadataService):
+    _metadata_version = '2009-04-04'
+
     def __init__(self):
         super(EC2Service, self).__init__()
         self._enable_retry = True
-        self.error_count = 0
 
     def load(self):
         super(EC2Service, self).load()
+        if CONF.ec2_add_metadata_private_ip_route:
+            network.check_metadata_ip_route(CONF.ec2_metadata_base_url)
+
         try:
-            self.get_meta_data('openstack')
+            self.get_host_name()
             return True
-        except Exception, err:
-            LOG.debug(err)
-            LOG.debug(traceback.format_exc())
+        except Exception as ex:
+            LOG.exception(ex)
             LOG.debug('Metadata not found at URL \'%s\'' %
                       CONF.ec2_metadata_base_url)
             return False
 
-    def _get_data(self, path):
-        data = {}
-        LOG.debug("Check for EC2 interface availability...")
-        if not self._check_EC2():
-            raise Exception("EC2 interface is not available")
-
-        LOG.debug('Getting data for the path: %s' % path)
-        if path.endswith('meta_data.json'):
-            for key in ec2nodes:
-                LOG.debug('Getting metadata from: %s' % key)
-                try:
-                    data[key] = self._get_EC2_value(key)
-                except:
-                    LOG.info("EC2 value %s is not available. Skip it." % key)
-            # Saving keys to the local folder
-            self._load_public_keys(data)
-
-        if path.endswith('user_data'):
-            norm_path = posixpath.join(CONF.ec2_metadata_base_url, 'user-data')
-            LOG.debug('Getting metadata from: %(norm_path)s' % locals())
-            try:
-                req = urllib2.Request(norm_path)
-                response = urllib2.urlopen(req)
-                data = response.read()
-                LOG.debug("Got data: %s" % data)
-            except:
-                LOG.error("EC2 user-data is not available.")
-        return data
-
-    def _check_EC2(self):
+    def _get_response(self, req):
         try:
-            data = self._get_EC2_value('')
-            return True
-        except:
-            return False
+            return request.urlopen(req)
+        except error.HTTPError as ex:
+            if ex.code == 404:
+                raise base.NotExistingMetadataException()
+            else:
+                raise
 
-    def _get_EC2_value(self, key):
-        meta_path = posixpath.join(
-            CONF.ec2_metadata_base_url, 'meta-data', key)
-        req = urllib2.Request(meta_path)
-        response = urllib2.urlopen(req)
+    def _get_data(self, path):
+        norm_path = posixpath.join(CONF.ec2_metadata_base_url, path)
+
+        LOG.debug('Getting metadata from: %(norm_path)s',
+                  {'norm_path': norm_path})
+        req = request.Request(norm_path)
+        response = self._get_response(req)
         return response.read()
 
-    def _load_public_keys(self, data):
-        try:
-            key_list = self._get_EC2_value('public-keys/')
-            LOG.debug("Got a list of keys %s" % key_list)
-            data['public_keys'] = {}
+    def get_host_name(self):
+        return self._get_cache_data('%s/meta-data/local-hostname' %
+                                    self._metadata_version)
 
-            for key_name in key_list.split('\n'):
-                key_index = key_name.split('=')[0]
-                LOG.debug('Loading key %s' % key_index)
-                key = self._get_EC2_value(
-                    'public-keys/%s/openssh-key' % key_index)
-                data['public_keys'].update({key_index: key})
+    def get_instance_id(self):
+        return self._get_cache_data('%s/meta-data/instance-id' %
+                                    self._metadata_version)
 
-        except Exception, ex:
-            LOG.debug("Can't save public key %s" % ex)
-            LOG.debug(traceback.format_exc())
+    def get_public_keys(self):
+        ssh_keys = []
+
+        keys_info = self._get_cache_data(
+            '%s/meta-data/public-keys' %
+            self._metadata_version).split("\n")
+
+        for key_info in keys_info:
+            (idx, key_name) = key_info.split('=')
+
+            ssh_key = self._get_cache_data(
+                '%(version)s/meta-data/public-keys/%(idx)s/openssh-key' %
+                {'version': self._metadata_version, 'idx': idx})
+            ssh_keys.append(ssh_key)
+
+        return ssh_keys
+
+    def get_network_config(self):
+        # TODO(alexpilotti): add static network support
+        pass
