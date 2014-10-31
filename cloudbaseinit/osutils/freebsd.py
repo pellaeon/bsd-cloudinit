@@ -92,6 +92,9 @@ class FreeBSDUtils(base.BaseOSUtils):
         
         resolv_conf_file.close()
 
+        # should return reboot_required, which is always false.
+        return False
+
     def set_dhcp_network_config(self, adapter_name):
         if_list = self.get_network_adapters()
         assert adapter_name in if_list, 'Network interface: ' + adapter_name + ' not found.'
