@@ -15,12 +15,11 @@ cfg.CONF()
 logging.setup('cloudbaseinit')
 LOG = logging.getLogger('cloudbaseinit.__main__')
 
-osutils = osutils_factory.OSUtilsFactory().get_os_utils()
+osutils = osutils_factory.get_os_utils()
 LOG.info("{}".format(osutils))
 
 # choose meta data service "httpservice"
-mdsf = metadata_factory.MetadataServiceFactory()
-service = mdsf.get_metadata_service()
+service = metadata_factory.get_metadata_service()
 LOG.info('Metadata service loaded: \'%s\'' % service.get_name())
 
 # test get meta data
@@ -29,7 +28,7 @@ LOG.info('get name =>', service.get_name())
 LOG.info('get meta data => {}'.format(service.get_meta_data('openstack')))
 
 # load plugins
-plugins = plugins_factory.PluginFactory().load_plugins()
+plugins = plugins_factory.load_plugins()
 
 # running each plugins
 for plugin in plugins:
