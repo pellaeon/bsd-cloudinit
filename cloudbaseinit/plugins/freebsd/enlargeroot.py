@@ -10,7 +10,7 @@ class EnlargeRoot(base.BasePlugin):
     def _call_shell(self, cmd):
         return subprocess.check_call(cmd, stderr=subprocess.STDOUT, shell=True)
 
-    def execute(self, service):
+    def execute(self, service, shared_data):
         rootdisk = 'vtbd0'
         self._call_shell('gpart recover ' + rootdisk)
         self._call_shell('sysctl kern.geom.debugflags=16')

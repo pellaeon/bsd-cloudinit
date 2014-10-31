@@ -5,7 +5,7 @@ from cloudbaseinit.openstack.common import log as logging
 LOG = logging.getLogger(__name__)
 
 class SetHostNamePlugin(base.BasePlugin):
-    def execute(self, service):
+    def execute(self, service, shared_data):
         meta_data = service.get_meta_data('openstack')
         if 'hostname' not in meta_data:
             LOG.debug('Hostname not found in metadata')
