@@ -1,6 +1,6 @@
 # vim: tabstop=4 shiftwidth=4 softtabstop=4
 
-# Copyright 2012 Pellaeon Lin <pellaeon@hs.ntnu.edu.tw>
+# Copyright 2012 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -17,27 +17,31 @@
 import os
 
 from oslo.config import cfg
+
+from cloudbaseinit import exception
 from cloudbaseinit.openstack.common import log as logging
 from cloudbaseinit.osutils import factory as osutils_factory
 from cloudbaseinit.plugins import base
 
 CONF = cfg.CONF
+CONF.import_opt('username', 'cloudbaseinit.plugins.freebsd.createuser')
 LOG = logging.getLogger(__name__)
 
 
 class SetUserSSHPublicKeysPlugin(base.BasePlugin):
     def execute(self, service, shared_data):
-        meta_data = service.get_meta_data('openstack')
-        if not 'public_keys' in meta_data:
+        public_keys = service.get_public_keys()
+        if not public_keys:
+            LOG.debug('Public keys not found in metadata')
             return (base.PLUGIN_EXECUTION_DONE, False)
 
         username = CONF.username
 
-        osutils = osutils_factory.OSUtilsFactory().get_os_utils()
+        osutils = osutils_factory.get_os_utils()
         user_home = osutils.get_user_home(username)
 
         if not user_home:
-            raise Exception("User home directory not found!")
+            raise exception.CloudbaseInitException("User home directory not found!")
 
         LOG.debug("User home: %s" % user_home)
 
@@ -46,9 +50,9 @@ class SetUserSSHPublicKeysPlugin(base.BasePlugin):
             os.makedirs(user_ssh_dir)
 
         authorized_keys_path = os.path.join(user_ssh_dir, "authorized_keys")
+        LOG.info("Writing SSH public keys in: %s" % authorized_keys_path)
         with open(authorized_keys_path, 'w') as f:
-            public_keys = meta_data['public_keys']
-            for k in public_keys:
-                f.write(public_keys[k])
+            for public_key in public_keys:
+                f.write(public_key)
 
         return (base.PLUGIN_EXECUTION_DONE, False)
