@@ -6,7 +6,7 @@ from cloudbaseinit.plugins import base as plugins_base
 from cloudbaseinit.plugins import factory as plugins_factory
 
 from cloudbaseinit.openstack.common import log as logging
-from cloudbaseinit.openstack.common import cfg
+from oslo.config import cfg
 
 import sys
 
