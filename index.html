@@ -59,7 +59,9 @@
 <li>SSH public key injection</li>
 <li>View instances' console message in OpenStack console log</li>
 <li>Self removal after first boot</li>
-</ul><h3>
+</ul>
+
+<h3>
 <a name="bsd-cloudinit-installer" class="anchor" href="#bsd-cloudinit-installer"><span class="octicon octicon-link"></span></a><a href="https://github.com/pellaeon/bsd-cloudinit-installer">bsd-cloudinit-installer</a>
 </h3>
 
@@ -72,10 +74,12 @@
 <li>Downloads and install bsd-cloudinit</li>
 <li>Add bsd-cloudinit to <code>/etc/rc.local</code>
 </li>
-</ul><h2>
-<a name="built-image" class="anchor" href="#built-image"><span class="octicon octicon-link"></span></a>Built image</h2>
+</ul>
 
-<p>We have <a href="http://images.openstack.nctu.edu.tw/bsd-cloudinit/">experimental built images</a> available for download.</p>
+<h2>
+<a name="pre-built-image" class="anchor" href="#pre-built-image"><span class="octicon octicon-link"></span></a>Pre-built image</h2>
+
+<p>We have <a href="http://images.openstack.nctu.edu.tw/bsd-cloudinit/">experimental pre-built images</a> available for download.</p>
 
 <p>You can use the following command to upload the image to Glance</p>
 
@@ -97,9 +101,11 @@
 <h3>
 <a name="install-freebsd-via-virt-manager" class="anchor" href="#install-freebsd-via-virt-manager"><span class="octicon octicon-link"></span></a>Install FreeBSD via virt-manager</h3>
 
-<p>First you'll have to install a normal FreeBSD (version 9.2 and 10.0 are tested) VM via virt-manager or similiar tools.</p>
+<p>First you'll have to install a normal FreeBSD (only version 10.0 tested) VM via virt-manager or similiar tools.</p>
 
-<p>Before booting into the installation CD, configure the VM's disk and network to use VIRTIO. Since FreeBSD 9.2 it should be able to detect it correctly.</p>
+<p><strong>When creating the VM, configure its disk and network to use VIRTIO</strong>. Since FreeBSD 9.2 it should be able to detect it correctly.</p>
+
+<p><em>Note: bsd-cloudinit will set all network interfaces except <code>lo0</code>, <code>plip0</code>, <code>pflog0</code> to use DHCP!</em></p>
 
 <p>The virtual disk size should be as small as possible, so it'll be quicker to deploy and upload. FreeBSD  requires root partition to be at least 1GB, so you should create a virtual disk slightly larger than 1GB. (We use 1.1GB in our released experimental images.)</p>
 
@@ -116,26 +122,11 @@
 To make sure, disk names in <code>/etc/fstab</code> should be <code>vtbd</code>.</p>
 
 <h3>
-<a name="output-to-openstack-console-log" class="anchor" href="#output-to-openstack-console-log"><span class="octicon octicon-link"></span></a>Output to OpenStack console log</h3>
-
-<pre><code>echo 'console="comconsole,vidconsole"' &gt;&gt; /boot/loader.conf
-</code></pre>
-
-<h3>
-<a name="bootloader-menu-delay" class="anchor" href="#bootloader-menu-delay"><span class="octicon octicon-link"></span></a>Bootloader menu delay</h3>
-
-<pre><code>echo 'autoboot_delay="1"' &gt;&gt; /boot/loader.conf
-</code></pre>
-
-<h3>
 <a name="download-and-execute-bsd-cloudinit-installer" class="anchor" href="#download-and-execute-bsd-cloudinit-installer"><span class="octicon octicon-link"></span></a>Download and execute bsd-cloudinit-installer</h3>
 
-<p>The installer will bootstrap PKGNG for you and install the following packages:</p>
+<p>The installer will modify some system configuration files, and install bsd-cloudinit and its Python dependencies.</p>
 
-<ul>
-<li>py-setuptools</li>
-<li>ca_root_nss</li>
-</ul><pre><code>fetch https://raw.github.com/pellaeon/bsd-cloudinit-installer/master/installer.sh
+<pre><code>fetch --no-verify-peer https://raw.github.com/pellaeon/bsd-cloudinit-installer/master/installer.sh
 chmod +x installer.sh
 ./installer.sh
 </code></pre>
@@ -167,13 +158,17 @@ chmod +x installer.sh
 <code>ntpdate</code> on first boot</li>
 <li>commandline options for the installer</li>
 <li>install <code>sudo</code> and remove hardcoded <code>root</code> password</li>
-</ul><h2>
+</ul>
+
+<h2>
 <a name="changelog" class="anchor" href="#changelog"><span class="octicon octicon-link"></span></a>Changelog</h2>
 
 <ul>
 <li>1312041: Fix <code>/home/freebsd</code> wrong permission.</li>
 <li>2014/06/30: Auto Python module installation in installer</li>
-</ul><h2>
+</ul>
+
+<h2>
 <a name="authors-and-contributors" class="anchor" href="#authors-and-contributors"><span class="octicon octicon-link"></span></a>Authors and Contributors</h2>
 
 <p>bsd-cloudinit is built by <a href="https://github.com/pellaeon" class="user-mention">@pellaeon</a>, <a href="https://github.com/apua" class="user-mention">@apua</a>, <a href="https://github.com/iblis17" class="user-mention">@iblis17</a> from Information Technology Service Center
@@ -186,7 +181,9 @@ chmod +x installer.sh
 <a href="https://github.com/iblis17" class="user-mention">@iblis17</a> takes care of the shell script parts.</li>
 <li>
 <a href="https://github.com/apua" class="user-mention">@apua</a> takes care of the Python bits.</li>
-</ul><p>This project is based on <a href="https://github.com/cloudbase/cloudbase-init">cloudbase-init</a>, we share most of non-OS-specific code.</p>
+</ul>
+
+<p>This project is based on <a href="https://github.com/cloudbase/cloudbase-init">cloudbase-init</a>, we share most of non-OS-specific code.</p>
 
 <h2>
 <a name="donation" class="anchor" href="#donation"><span class="octicon octicon-link"></span></a>Donation</h2>
