@@ -37,25 +37,17 @@ LOG = logging.getLogger(__name__)
 
 
 class CreateUserPlugin(base.BasePlugin):
-    def _get_password(self, service, osutils):
-        meta_data = service.get_meta_data('openstack')
-        meta = meta_data.get('meta')
+    def _get_password(self, osutils):
+        # Generate a temporary random password to be replaced
+        # by SetUserPasswordPlugin (starting from Grizzly)
+        return osutils.generate_random_password(14)
 
-        if CONF.inject_user_password and meta and 'admin_pass' in meta:
-            LOG.warn('Using admin_pass metadata user password. Consider '
-                     'changing it as soon as possible')
-            password = meta['admin_pass']
-        else:
-            # Generate a temporary random password to be replaced
-            # by SetUserPasswordPlugin (starting from Grizzly)
-            password = osutils.generate_random_password(14)
-        return password
-
-    def execute(self, service):
+    def execute(self, service, shared_data):
         user_name = CONF.username
+        shared_data[constants.SHARED_DATA_USERNAME] = user_name
 
-        osutils = osutils_factory.OSUtilsFactory().get_os_utils()
-        password = self._get_password(service, osutils)
+        osutils = osutils_factory.get_os_utils()
+        password = self._get_password(osutils)
 
         if osutils.user_exists(user_name):
             LOG.info('Setting password for existing user "%s"' % user_name)
@@ -63,6 +55,7 @@ class CreateUserPlugin(base.BasePlugin):
         else:
             LOG.info('Creating user "%s" and setting password' % user_name)
             osutils.create_user(user_name, password, CONF.groups, False)
+            shared_data[constants.SHARED_DATA_PASSWORD] = password
 
         '''for group_name in CONF.groups:
             try:
