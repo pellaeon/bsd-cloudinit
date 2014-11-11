@@ -25,6 +25,7 @@ opts = [
         'cloudbaseinit.plugins.freebsd.sethostname.SetHostNamePlugin',
         'cloudbaseinit.plugins.freebsd.createuser.CreateUserPlugin',
         'cloudbaseinit.plugins.freebsd.setuserpassword.SetUserPasswordPlugin',
+        'cloudbaseinit.plugins.freebsd.scramblerootpassword.ScrambleRootPassword',
         'cloudbaseinit.plugins.freebsd.enlargeroot.EnlargeRoot',
         'cloudbaseinit.plugins.freebsd.networkconfig.NetworkConfigPlugin',
         'cloudbaseinit.plugins.freebsd.sshpublickeys.'
