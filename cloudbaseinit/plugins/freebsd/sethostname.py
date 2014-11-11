@@ -22,7 +22,6 @@ from cloudbaseinit.osutils import factory as osutils_factory
 from cloudbaseinit.plugins import base
 
 CONF = cfg.CONF
-CONF.register_opts(opts)
 
 LOG = logging.getLogger(__name__)
 

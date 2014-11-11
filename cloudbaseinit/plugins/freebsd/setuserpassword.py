@@ -32,7 +32,7 @@ opts = [
 
 CONF = cfg.CONF
 CONF.register_opts(opts)
-CONF.import_opt('username', 'cloudbaseinit.plugins.windows.createuser')
+CONF.import_opt('username', 'cloudbaseinit.plugins.freebsd.createuser')
 
 LOG = logging.getLogger(__name__)
 
