@@ -18,6 +18,7 @@ from oslo.config import cfg
 from cloudbaseinit.openstack.common import log as logging
 from cloudbaseinit.osutils import factory as osutils_factory
 from cloudbaseinit.plugins import base
+from cloudbaseinit.plugins import constants
 
 opts = [
     cfg.StrOpt('username', default='freebsd', help='User to be added to the '
