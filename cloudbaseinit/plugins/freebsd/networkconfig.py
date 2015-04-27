@@ -22,7 +22,7 @@ from oslo.config import cfg
 from cloudbaseinit import exception
 from cloudbaseinit.openstack.common import log as logging
 from cloudbaseinit.osutils import factory as osutils_factory
-from cloudbaseinit.plugins import base
+from cloudbaseinit.plugins.common import base
 
 LOG = logging.getLogger(__name__)
 
