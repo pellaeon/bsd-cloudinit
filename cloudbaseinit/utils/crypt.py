@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -67,6 +65,13 @@ openssl.BN_new.restype = ctypes.c_void_p
 openssl.RSA_size.restype = ctypes.c_int
 openssl.RSA_size.argtypes = [ctypes.POINTER(RSA)]
 
+openssl.RSA_public_encrypt.argtypes = [ctypes.c_int,
+                                       ctypes.c_char_p,
+                                       ctypes.c_char_p,
+                                       ctypes.POINTER(RSA),
+                                       ctypes.c_int]
+openssl.RSA_public_encrypt.restype = ctypes.c_int
+
 openssl.RSA_free.argtypes = [ctypes.POINTER(RSA)]
 
 openssl.PEM_write_RSAPublicKey.restype = ctypes.c_int
@@ -96,6 +101,7 @@ class CryptException(Exception):
 
 
 class OpenSSLException(CryptException):
+
     def __init__(self):
         message = self._get_openssl_error_msg()
         super(OpenSSLException, self).__init__(message)
@@ -109,6 +115,7 @@ class OpenSSLException(CryptException):
 
 
 class RSAWrapper(object):
+
     def __init__(self, rsa_p):
         self._rsa_p = rsa_p
 
@@ -138,6 +145,7 @@ class RSAWrapper(object):
 
 
 class CryptManager(object):
+
     def load_ssh_rsa_public_key(self, ssh_pub_key):
         ssh_rsa_prefix = "ssh-rsa "
 
@@ -158,7 +166,7 @@ class CryptManager(object):
         key_type_len = struct.unpack('>I', pub_key[offset:offset + 4])[0]
         offset += 4
 
-        key_type = pub_key[offset:offset + key_type_len]
+        key_type = pub_key[offset:offset + key_type_len].decode('utf-8')
         offset += key_type_len
 
         if key_type not in ['ssh-rsa', 'rsa', 'rsa1']:

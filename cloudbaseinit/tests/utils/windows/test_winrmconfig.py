@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -15,22 +13,23 @@
 #    under the License.
 
 import importlib
-import mock
 import unittest
+from xml.sax import saxutils
+
+try:
+    import unittest.mock as mock
+except ImportError:
+    import mock
 
 from cloudbaseinit import exception
-
-
-class FakeComError(Exception):
-    def __init__(self):
-        super(FakeComError, self).__init__()
-        self.excepinfo = [None, None, None, None, None, -2144108544]
+from cloudbaseinit.tests import fake
 
 
 class WinRMConfigTests(unittest.TestCase):
+
     def setUp(self):
         self._pywintypes_mock = mock.MagicMock()
-        self._pywintypes_mock.com_error = FakeComError
+        self._pywintypes_mock.com_error = fake.FakeComError
         self._win32com_mock = mock.MagicMock()
         self._module_patcher = mock.patch.dict(
             'sys.modules',
@@ -269,10 +268,14 @@ class WinRMConfigTests(unittest.TestCase):
                      'subject': 'subject',
                      'uri': 'fake:\\uri'}
         mock_get_xml_bool.return_value = True
+        fake_password = "Pa&ssw0rd!"
+        fake_username = 'fake user'
+        expected_password = saxutils.escape(fake_password)
+        expected_username = saxutils.escape(fake_username)
 
         self._winrmconfig.create_cert_mapping(
-            issuer='issuer', subject='subject', username='fake user',
-            password='fake password', uri='fake:\\uri', enabled=True)
+            issuer='issuer', subject='subject', username=fake_username,
+            password=fake_password, uri='fake:\\uri', enabled=True)
 
         mock_get_xml_bool.assert_called_once_with(True)
         mock_create_resource.assert_called_once_with(
@@ -283,8 +286,8 @@ class WinRMConfigTests(unittest.TestCase):
             '<p:Password>%(password)s</p:Password>'
             '<p:UserName>%(username)s</p:UserName>'
             '</p:certmapping>' % {'enabled': True,
-                                  'username': 'fake user',
-                                  'password': 'fake password'})
+                                  'username': expected_username,
+                                  'password': expected_password})
 
     @mock.patch('cloudbaseinit.utils.windows.winrmconfig.WinRMConfig.'
                 '_get_resource')

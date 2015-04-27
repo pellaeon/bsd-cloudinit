@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -15,9 +13,13 @@
 #    under the License.
 
 import importlib
-import mock
 import six
 import unittest
+
+try:
+    import unittest.mock as mock
+except ImportError:
+    import mock
 
 from cloudbaseinit.utils import x509constants
 
@@ -45,6 +47,7 @@ class CryptoAPICertManagerTests(unittest.TestCase):
     def _test_get_cert_thumprint(self, mock_CertGetCertificateContextProperty,
                                  mock_malloc, mock_free, ret_val):
         mock_DWORD = self._ctypes.wintypes.DWORD
+        mock_CSIZET = self._ctypes.c_size_t
         mock_cast = self._ctypes.cast
         mock_POINTER = self._ctypes.POINTER
         mock_byref = self._ctypes.byref
@@ -52,6 +55,7 @@ class CryptoAPICertManagerTests(unittest.TestCase):
         mock_pointer = mock.MagicMock()
         fake_cert_context_p = 'fake context'
         mock_DWORD.return_value.value = 10
+        mock_CSIZET.return_value.value = mock_DWORD.return_value.value
         mock_CertGetCertificateContextProperty.return_value = ret_val
         mock_POINTER.return_value = mock_pointer
         mock_cast.return_value.contents = [16]
@@ -76,7 +80,7 @@ class CryptoAPICertManagerTests(unittest.TestCase):
                 expected,
                 mock_CertGetCertificateContextProperty.call_args_list)
 
-            mock_malloc.assert_called_with(mock_DWORD.return_value)
+            mock_malloc.assert_called_with(mock_CSIZET.return_value)
             mock_cast.assert_called_with(mock_malloc(), mock_pointer)
             mock_free.assert_called_with(mock_malloc())
             self.assertEqual('10', response)
@@ -281,6 +285,8 @@ class CryptoAPICertManagerTests(unittest.TestCase):
         fake_cert_data += x509constants.PEM_HEADER + '\n'
         fake_cert_data += 'fake cert' + '\n'
         fake_cert_data += x509constants.PEM_FOOTER
+        fake_cert_data = fake_cert_data.encode()
+
         response = self._x509_manager._get_cert_base64(fake_cert_data)
         self.assertEqual('fake cert', response)
 

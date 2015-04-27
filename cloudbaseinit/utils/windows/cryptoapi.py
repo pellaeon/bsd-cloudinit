@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -21,6 +19,7 @@ from ctypes import wintypes
 
 
 class CryptoAPIException(Exception):
+
     def __init__(self):
         message = self._get_windows_error()
         super(CryptoAPIException, self).__init__(message)
@@ -102,8 +101,8 @@ CRYPT_STRING_BASE64 = 1
 PKCS_7_ASN_ENCODING = 65536
 PROV_RSA_FULL = 1
 X509_ASN_ENCODING = 1
-szOID_PKIX_KP_SERVER_AUTH = "1.3.6.1.5.5.7.3.1"
-szOID_RSA_SHA1RSA = "1.2.840.113549.1.1.5"
+szOID_PKIX_KP_SERVER_AUTH = b"1.3.6.1.5.5.7.3.1"
+szOID_RSA_SHA1RSA = b"1.2.840.113549.1.1.5"
 
 advapi32 = windll.advapi32
 crypt32 = windll.crypt32

@@ -12,6 +12,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+
 import json
 import posixpath
 
@@ -19,7 +20,10 @@ from oslo.config import cfg
 
 from cloudbaseinit.metadata.services import base
 from cloudbaseinit.openstack.common import log as logging
+from cloudbaseinit.utils import debiface
+from cloudbaseinit.utils import encoding
 from cloudbaseinit.utils import x509constants
+
 
 opts = [
     cfg.StrOpt('metadata_base_url', default='http://169.254.169.254/',
@@ -48,7 +52,8 @@ class BaseOpenStackService(base.BaseMetadataService):
         path = posixpath.normpath(
             posixpath.join('openstack', version, 'meta_data.json'))
         data = self._get_cache_data(path)
-        return json.loads(data.decode('utf8'))
+        if data:
+            return json.loads(encoding.get_as_string(data))
 
     def get_instance_id(self):
         return self._get_meta_data().get('uuid')
@@ -61,8 +66,19 @@ class BaseOpenStackService(base.BaseMetadataService):
         if public_keys:
             return public_keys.values()
 
-    def get_network_config(self):
-        return self._get_meta_data().get('network_config')
+    def get_network_details(self):
+        network_config = self._get_meta_data().get('network_config')
+        if not network_config:
+            return None
+        key = "content_path"
+        if key not in network_config:
+            return None
+
+        content_name = network_config[key].rsplit("/", 1)[-1]
+        content = self.get_content(content_name)
+        content = encoding.get_as_string(content)
+
+        return debiface.parse(content)
 
     def get_admin_password(self):
         meta_data = self._get_meta_data()
@@ -98,10 +114,12 @@ class BaseOpenStackService(base.BaseMetadataService):
                 i += 1
 
         if not cert_data:
+
             # Look if the user_data contains a PEM certificate
             try:
                 user_data = self.get_user_data()
-                if user_data.startswith(x509constants.PEM_HEADER):
+                if user_data.startswith(
+                        x509constants.PEM_HEADER.encode()):
                     cert_data = user_data
             except base.NotExistingMetadataException:
                 LOG.debug("user_data metadata not present")

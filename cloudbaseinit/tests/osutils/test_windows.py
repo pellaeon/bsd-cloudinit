@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -14,20 +12,25 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import importlib
-import mock
-import os
-import six
-import unittest
 
+import importlib
+import os
+
+try:
+    import unittest.mock as mock
+except ImportError:
+    import mock
 from oslo.config import cfg
+import six
 
 from cloudbaseinit import exception
+from cloudbaseinit.tests import fake
+from cloudbaseinit.tests import testutils
 
 CONF = cfg.CONF
 
 
-class WindowsUtilsTest(unittest.TestCase):
+class TestWindowsUtils(testutils.CloudbaseInitTestBase):
     '''Tests for the windows utils class.'''
 
     _CONFIG_NAME = 'FakeConfig'
@@ -40,6 +43,7 @@ class WindowsUtilsTest(unittest.TestCase):
 
     def setUp(self):
         self._pywintypes_mock = mock.MagicMock()
+        self._pywintypes_mock.com_error = fake.FakeComError
         self._win32com_mock = mock.MagicMock()
         self._win32process_mock = mock.MagicMock()
         self._win32security_mock = mock.MagicMock()
@@ -47,6 +51,7 @@ class WindowsUtilsTest(unittest.TestCase):
         self._moves_mock = mock.MagicMock()
         self._xmlrpc_client_mock = mock.MagicMock()
         self._ctypes_mock = mock.MagicMock()
+        self._tzlocal_mock = mock.Mock()
 
         self._module_patcher = mock.patch.dict(
             'sys.modules',
@@ -57,7 +62,8 @@ class WindowsUtilsTest(unittest.TestCase):
              'six.moves': self._moves_mock,
              'six.moves.xmlrpc_client': self._xmlrpc_client_mock,
              'ctypes': self._ctypes_mock,
-             'pywintypes': self._pywintypes_mock})
+             'pywintypes': self._pywintypes_mock,
+             'tzlocal': self._tzlocal_mock})
 
         self._module_patcher.start()
         self.windows_utils = importlib.import_module(
@@ -74,37 +80,18 @@ class WindowsUtilsTest(unittest.TestCase):
     def tearDown(self):
         self._module_patcher.stop()
 
-    def test_enable_shutdown_privilege(self):
-        fake_process = mock.MagicMock()
-        fake_token = True
-        LUID = 'fakeid'
-        self._win32process_mock.GetCurrentProcess.return_value = fake_process
-        self._win32security_mock.OpenProcessToken.return_value = fake_token
-        self._win32security_mock.LookupPrivilegeValue.return_value = LUID
-
-        self._winutils._enable_shutdown_privilege()
-
-        privilege = [(LUID,
-                      self._win32security_mock.SE_PRIVILEGE_ENABLED)]
-        self._win32security_mock.AdjustTokenPrivileges.assert_called_with(
-            fake_token,
-            False,
-            privilege)
-
-        self._win32security_mock.OpenProcessToken.assert_called_with(
-            fake_process, self._win32security_mock.TOKEN_ADJUST_PRIVILEGES |
-            self._win32security_mock.TOKEN_QUERY)
-
-    @mock.patch('cloudbaseinit.osutils.windows.WindowsUtils'
-                '._enable_shutdown_privilege')
-    def _test_reboot(self, mock_enable_shutdown_privilege, ret_value):
+    @mock.patch('cloudbaseinit.osutils.windows.privilege')
+    def _test_reboot(self, mock_privilege_module, ret_value,
+                     expected_ret_value=None):
+        mock_privilege_module.acquire_privilege = mock.MagicMock()
         advapi32 = self._windll_mock.advapi32
         advapi32.InitiateSystemShutdownW = mock.MagicMock(
             return_value=ret_value)
 
         if not ret_value:
-            self.assertRaises(exception.CloudbaseInitException,
-                              self._winutils.reboot)
+            with self.assert_raises_windows_message(
+                    "Reboot failed: %r", expected_ret_value):
+                self._winutils.reboot()
         else:
             self._winutils.reboot()
 
@@ -112,12 +99,14 @@ class WindowsUtilsTest(unittest.TestCase):
                 0,
                 "Cloudbase-Init reboot",
                 0, True, True)
+        mock_privilege_module.acquire_privilege.assert_called_once_with(
+            self._win32security_mock.SE_SHUTDOWN_NAME)
 
     def test_reboot(self):
         self._test_reboot(ret_value=True)
 
     def test_reboot_failed(self):
-        self._test_reboot(ret_value=None)
+        self._test_reboot(ret_value=None, expected_ret_value=100)
 
     @mock.patch('cloudbaseinit.osutils.windows.WindowsUtils'
                 '._sanitize_wmi_input')
@@ -177,15 +166,10 @@ class WindowsUtilsTest(unittest.TestCase):
     @mock.patch('cloudbaseinit.osutils.windows.WindowsUtils'
                 '._set_user_password_expiration')
     @mock.patch('cloudbaseinit.osutils.windows.WindowsUtils'
-                '.execute_process')
-    def _test_create_or_change_user(self, mock_execute_process,
+                '._get_adsi_object')
+    def _test_create_or_change_user(self, mock_get_adsi_object,
                                     mock_set_user_password_expiration,
                                     create, password_expires, ret_value=0):
-        args = ['NET', 'USER', self._USERNAME, self._PASSWORD]
-        if create:
-            args.append('/ADD')
-
-        mock_execute_process.return_value = (None, None, ret_value)
 
         if not ret_value:
             self._winutils._create_or_change_user(self._USERNAME,
@@ -194,12 +178,18 @@ class WindowsUtilsTest(unittest.TestCase):
             mock_set_user_password_expiration.assert_called_with(
                 self._USERNAME, password_expires)
         else:
+            mock_get_adsi_object.side_effect = [
+                self._pywintypes_mock.com_error]
             self.assertRaises(
                 exception.CloudbaseInitException,
                 self._winutils._create_or_change_user,
                 self._USERNAME, self._PASSWORD, create, password_expires)
 
-        mock_execute_process.assert_called_with(args)
+        if create:
+            mock_get_adsi_object.assert_called_with()
+        else:
+            mock_get_adsi_object.assert_called_with(
+                object_name=self._USERNAME, object_type='user')
 
     def test_create_user_and_add_password_expire_true(self):
         self._test_create_or_change_user(create=True, password_expires=True)
@@ -251,7 +241,7 @@ class WindowsUtilsTest(unittest.TestCase):
     def test_set_password_expiration_no_object(self):
         self._test_set_user_password_expiration(fake_obj=None)
 
-    def _test_get_user_sid_and_domain(self, ret_val):
+    def _test_get_user_sid_and_domain(self, ret_val, last_error=None):
         cbSid = mock.Mock()
         sid = mock.Mock()
         size = 1024
@@ -267,10 +257,11 @@ class WindowsUtilsTest(unittest.TestCase):
 
         advapi32.LookupAccountNameW.return_value = ret_val
         if ret_val is None:
-            self.assertRaises(
-                exception.CloudbaseInitException,
-                self._winutils._get_user_sid_and_domain,
-                self._USERNAME)
+            with self.assert_raises_windows_message(
+                    "Cannot get user SID: %r",
+                    last_error):
+                self._winutils._get_user_sid_and_domain(
+                    self._USERNAME)
         else:
             response = self._winutils._get_user_sid_and_domain(self._USERNAME)
 
@@ -286,7 +277,7 @@ class WindowsUtilsTest(unittest.TestCase):
         self._test_get_user_sid_and_domain(ret_val=fake_obj)
 
     def test_get_user_sid_and_domain_no_return_value(self):
-        self._test_get_user_sid_and_domain(ret_val=None)
+        self._test_get_user_sid_and_domain(ret_val=None, last_error=100)
 
     @mock.patch('cloudbaseinit.osutils.windows'
                 '.Win32_LOCALGROUP_MEMBERS_INFO_3')
@@ -367,8 +358,8 @@ class WindowsUtilsTest(unittest.TestCase):
 
     @mock.patch('cloudbaseinit.osutils.windows.Win32_PROFILEINFO')
     def _test_create_user_logon_session(self, mock_Win32_PROFILEINFO, logon,
-                                        loaduser,
-                                        load_profile=True):
+                                        loaduser, load_profile=True,
+                                        last_error=None):
         self._wintypes_mock.HANDLE = mock.MagicMock()
         pi = self.windows_utils.Win32_PROFILEINFO()
         advapi32 = self._windll_mock.advapi32
@@ -378,20 +369,20 @@ class WindowsUtilsTest(unittest.TestCase):
         advapi32.LogonUserW.return_value = logon
 
         if not logon:
-            self.assertRaises(
-                exception.CloudbaseInitException,
-                self._winutils.create_user_logon_session,
-                self._USERNAME, self._PASSWORD, domain='.',
-                load_profile=load_profile)
+            with self.assert_raises_windows_message(
+                    "User logon failed: %r", last_error):
+                self._winutils.create_user_logon_session(
+                    self._USERNAME, self._PASSWORD, domain='.',
+                    load_profile=load_profile)
 
         elif load_profile and not loaduser:
             userenv.LoadUserProfileW.return_value = None
             kernel32.CloseHandle.return_value = None
-
-            self.assertRaises(exception.CloudbaseInitException,
-                              self._winutils.create_user_logon_session,
-                              self._USERNAME, self._PASSWORD, domain='.',
-                              load_profile=load_profile)
+            with self.assert_raises_windows_message(
+                    "Cannot load user profile: %r", last_error):
+                self._winutils.create_user_logon_session(
+                    self._USERNAME, self._PASSWORD, domain='.',
+                    load_profile=load_profile)
 
             userenv.LoadUserProfileW.assert_called_with(
                 self._wintypes_mock.HANDLE.return_value,
@@ -422,28 +413,38 @@ class WindowsUtilsTest(unittest.TestCase):
             self.assertTrue(response is not None)
 
     def test_create_user_logon_session_fail_load_false(self):
-        self._test_create_user_logon_session(0, 0, True)
+        self._test_create_user_logon_session(logon=0, loaduser=0,
+                                             load_profile=True,
+                                             last_error=100)
 
     def test_create_user_logon_session_fail_load_true(self):
-        self._test_create_user_logon_session(0, 0, False)
+        self._test_create_user_logon_session(logon=0, loaduser=0,
+                                             load_profile=False,
+                                             last_error=100)
 
     def test_create_user_logon_session_load_true(self):
         m = mock.Mock()
         n = mock.Mock()
-        self._test_create_user_logon_session(m, n, True)
+        self._test_create_user_logon_session(logon=m, loaduser=n,
+                                             load_profile=True)
 
     def test_create_user_logon_session_load_false(self):
         m = mock.Mock()
         n = mock.Mock()
-        self._test_create_user_logon_session(m, n, False)
+        self._test_create_user_logon_session(logon=m, loaduser=n,
+                                             load_profile=False)
 
     def test_create_user_logon_session_no_load_true(self):
         m = mock.Mock()
-        self._test_create_user_logon_session(m, None, True)
+        self._test_create_user_logon_session(logon=m, loaduser=None,
+                                             load_profile=True,
+                                             last_error=100)
 
     def test_create_user_logon_session_no_load_false(self):
         m = mock.Mock()
-        self._test_create_user_logon_session(m, None, False)
+        self._test_create_user_logon_session(logon=m, loaduser=None,
+                                             load_profile=False,
+                                             last_error=100)
 
     def test_close_user_logon_session(self):
         token = mock.Mock()
@@ -454,14 +455,16 @@ class WindowsUtilsTest(unittest.TestCase):
         self._windll_mock.kernel32.CloseHandle.assert_called_with(token)
 
     @mock.patch('ctypes.windll.kernel32.SetComputerNameExW')
-    def _test_set_host_name(self, mock_SetComputerNameExW, ret_value):
+    def _test_set_host_name(self, mock_SetComputerNameExW, ret_value,
+                            last_error=None):
         mock_SetComputerNameExW.return_value = ret_value
 
         if not ret_value:
-            self.assertRaises(exception.CloudbaseInitException,
-                              self._winutils.set_host_name, 'fake name')
+            with self.assert_raises_windows_message(
+                    "Cannot set host name: %r", last_error):
+                self._winutils.set_host_name('fake name')
         else:
-            self._winutils.set_host_name('fake name')
+            self.assertTrue(self._winutils.set_host_name('fake name'))
 
         mock_SetComputerNameExW.assert_called_with(
             self._winutils.ComputerNamePhysicalDnsHostname,
@@ -471,7 +474,7 @@ class WindowsUtilsTest(unittest.TestCase):
         self._test_set_host_name(ret_value='fake response')
 
     def test_set_host_exception(self):
-        self._test_set_host_name(ret_value=None)
+        self._test_set_host_name(ret_value=None, last_error=100)
 
     @mock.patch('cloudbaseinit.osutils.windows.WindowsUtils'
                 '.get_user_sid')
@@ -517,7 +520,8 @@ class WindowsUtilsTest(unittest.TestCase):
 
         response = self._winutils.get_network_adapters()
         conn.return_value.query.assert_called_with(wql)
-        self.assertEqual([mock_response.Name], response)
+        self.assertEqual([(mock_response.Name, mock_response.MACAddress)],
+                         response)
 
     def test_get_network_adapters(self):
         self._test_get_network_adapters(False)
@@ -532,7 +536,7 @@ class WindowsUtilsTest(unittest.TestCase):
                                         ret_val2=None, ret_val3=None):
         conn = self._wmi_mock.WMI
         address = '10.10.10.10'
-        adapter_name = 'adapter_name'
+        mac_address = '54:EE:75:19:F4:61'
         broadcast = '0.0.0.0'
         dns_list = ['8.8.8.8']
 
@@ -540,10 +544,9 @@ class WindowsUtilsTest(unittest.TestCase):
             self.assertRaises(
                 exception.CloudbaseInitException,
                 self._winutils.set_static_network_config,
-                adapter_name, address, self._NETMASK,
+                mac_address, address, self._NETMASK,
                 broadcast, self._GATEWAY, dns_list)
         else:
-            mock_sanitize_wmi_input.return_value = adapter_name
             conn.return_value.query.return_value = adapter
             adapter_config = adapter[0].associators()[0]
             adapter_config.EnableStatic.return_value = ret_val1
@@ -555,26 +558,26 @@ class WindowsUtilsTest(unittest.TestCase):
                 self.assertRaises(
                     exception.CloudbaseInitException,
                     self._winutils.set_static_network_config,
-                    adapter_name, address, self._NETMASK,
+                    mac_address, address, self._NETMASK,
                     broadcast, self._GATEWAY, dns_list)
 
             elif ret_val2[0] > 1:
                 self.assertRaises(
                     exception.CloudbaseInitException,
                     self._winutils.set_static_network_config,
-                    adapter_name, address, self._NETMASK,
+                    mac_address, address, self._NETMASK,
                     broadcast, self._GATEWAY, dns_list)
 
             elif ret_val3[0] > 1:
                 self.assertRaises(
                     exception.CloudbaseInitException,
                     self._winutils.set_static_network_config,
-                    adapter_name, address, self._NETMASK,
+                    mac_address, address, self._NETMASK,
                     broadcast, self._GATEWAY, dns_list)
 
             else:
                 response = self._winutils.set_static_network_config(
-                    adapter_name, address, self._NETMASK,
+                    mac_address, address, self._NETMASK,
                     broadcast, self._GATEWAY, dns_list)
 
                 if ret_val1[0] or ret_val2[0] or ret_val3[0] == 1:
@@ -588,14 +591,12 @@ class WindowsUtilsTest(unittest.TestCase):
                 adapter_config.SetDNSServerSearchOrder.assert_called_with(
                     dns_list)
 
-                self._winutils._sanitize_wmi_input.assert_called_with(
-                    adapter_name)
                 adapter[0].associators.assert_called_with(
                     wmi_result_class='Win32_NetworkAdapterConfiguration')
                 conn.return_value.query.assert_called_with(
-                    'SELECT * FROM Win32_NetworkAdapter WHERE MACAddress IS '
-                    'NOT NULL AND Name = \'%(adapter_name_san)s\'' %
-                    {'adapter_name_san': adapter_name})
+                    "SELECT * FROM Win32_NetworkAdapter WHERE "
+                    "MACAddress = '{}'".format(mac_address)
+                )
 
     def test_set_static_network_config(self):
         adapter = mock.MagicMock()
@@ -1010,7 +1011,7 @@ class WindowsUtilsTest(unittest.TestCase):
         mock_generate_random_password.assert_called_once_with(length)
         self.assertEqual('Passw0rd', response)
 
-    def _test_get_logical_drives(self, buf_length):
+    def _test_get_logical_drives(self, buf_length, last_error=None):
         mock_buf = mock.MagicMock()
         mock_buf.__getitem__.side_effect = ['1', '\x00']
         mock_get_drives = self._windll_mock.kernel32.GetLogicalDriveStringsW
@@ -1019,9 +1020,9 @@ class WindowsUtilsTest(unittest.TestCase):
         mock_get_drives.return_value = buf_length
 
         if buf_length is None:
-            self.assertRaises(exception.CloudbaseInitException,
-                              self._winutils._get_logical_drives)
-
+            with self.assert_raises_windows_message(
+                    "GetLogicalDriveStringsW failed: %r", last_error):
+                self._winutils._get_logical_drives()
         else:
             response = self._winutils._get_logical_drives()
 
@@ -1030,7 +1031,7 @@ class WindowsUtilsTest(unittest.TestCase):
             self.assertEqual(['1'], response)
 
     def test_get_logical_drives_exception(self):
-        self._test_get_logical_drives(buf_length=None)
+        self._test_get_logical_drives(buf_length=None, last_error=100)
 
     def test_get_logical_drives(self):
         self._test_get_logical_drives(buf_length=2)
@@ -1053,11 +1054,18 @@ class WindowsUtilsTest(unittest.TestCase):
     @mock.patch('cloudbaseinit.osutils.windows.Win32_STORAGE_DEVICE_NUMBER')
     def _test_get_physical_disks(self, mock_sdn, mock_setupapi, mock_kernel32,
                                  mock_msvcrt, handle_disks, last_error,
-                                 interface_detail, disk_handle, io_control):
+                                 interface_detail, disk_handle, io_control,
+                                 last_error_code=None):
 
-        sizeof_calls = [mock.call(
-            self.windows_utils.Win32_SP_DEVICE_INTERFACE_DATA),
-            mock.call(mock_sdn())]
+        sizeof_calls = [
+            mock.call(
+                self.windows_utils.Win32_SP_DEVICE_INTERFACE_DATA
+            ),
+            mock.call(
+                self.windows_utils.Win32_SP_DEVICE_INTERFACE_DETAIL_DATA_W
+            ),
+            mock.call(mock_sdn())
+        ]
         device_interfaces_calls = [
             mock.call(
                 handle_disks, None, self._ctypes_mock.byref.return_value, 0,
@@ -1086,9 +1094,18 @@ class WindowsUtilsTest(unittest.TestCase):
                 interface_detail) or (
                     disk_handle == self._winutils.INVALID_HANDLE_VALUE) or (
                         not io_control):
-
-            self.assertRaises(exception.CloudbaseInitException,
-                              self._winutils.get_physical_disks)
+            if not io_control:
+                with self.assert_raises_windows_message(
+                        "DeviceIoControl failed: %r", last_error_code):
+                    self._winutils.get_physical_disks()
+            elif not interface_detail:
+                with self.assert_raises_windows_message(
+                        "SetupDiGetDeviceInterfaceDetailW failed: %r",
+                        last_error_code):
+                    self._winutils.get_physical_disks()
+            else:
+                self.assertRaises(exception.CloudbaseInitException,
+                                  self._winutils.get_physical_disks)
 
         else:
             response = self._winutils.get_physical_disks()
@@ -1106,7 +1123,8 @@ class WindowsUtilsTest(unittest.TestCase):
             self._ctypes_mock.POINTER.assert_called_with(
                 self.windows_utils.Win32_SP_DEVICE_INTERFACE_DETAIL_DATA_W)
             mock_msvcrt.malloc.assert_called_with(
-                self._wintypes_mock.DWORD.return_value)
+                self._ctypes_mock.c_size_t.return_value
+            )
 
             self.assertEqual(cast_calls, self._ctypes_mock.cast.call_args_list)
 
@@ -1153,6 +1171,7 @@ class WindowsUtilsTest(unittest.TestCase):
         self._test_get_physical_disks(
             handle_disks=mock_handle_disks,
             last_error='other', interface_detail=None,
+            last_error_code=100,
             disk_handle=mock_disk_handle, io_control=True)
 
     def test_get_physical_disks_invalid_disk_handle(self):
@@ -1170,6 +1189,7 @@ class WindowsUtilsTest(unittest.TestCase):
             handle_disks=mock_handle_disks,
             last_error=self._winutils.ERROR_INSUFFICIENT_BUFFER,
             interface_detail='fake interface detail',
+            last_error_code=100,
             disk_handle=mock_disk_handle, io_control=False)
 
     def test_get_physical_disks_handle_disks_invalid(self):
@@ -1201,48 +1221,32 @@ class WindowsUtilsTest(unittest.TestCase):
         mock_get_fw_protocol.assert_called_once_with(
             self._winutils.PROTOCOL_TCP)
 
-    @mock.patch('cloudbaseinit.osutils.windows.kernel32.IsWow64Process')
-    @mock.patch('cloudbaseinit.osutils.windows.kernel32.GetCurrentProcess')
-    def _test_is_wow64(self, mock_GetCurrentProcess,
-                       mock_IsWow64Process, ret_val):
-        mock_IsWow64Process.return_value = ret_val
-        self._wintypes_mock.BOOL.return_value.value = ret_val
-
-        if ret_val is False:
-            self.assertRaises(exception.CloudbaseInitException,
-                              self._winutils.is_wow64)
-
-        else:
-            response = self._winutils.is_wow64()
-            self._ctypes_mock.byref.assert_called_once_with(
-                self._wintypes_mock.BOOL.return_value)
-
-            mock_IsWow64Process.assert_called_once_with(
-                mock_GetCurrentProcess(), self._ctypes_mock.byref.return_value)
-
-            self.assertTrue(response)
-
-    def test_is_wow64(self):
-        self._test_is_wow64(ret_val=True)
-
-    def test_is_wow64_exception(self):
-        self._test_is_wow64(ret_val=False)
-
     @mock.patch('os.path.expandvars')
     def test_get_system32_dir(self, mock_expandvars):
-        mock_expandvars.return_value = 'fake_system32'
-
+        path = "system32"
+        mock_expandvars.return_value = path
         response = self._winutils.get_system32_dir()
 
-        self.assertEqual('fake_system32', response)
+        mock_expandvars.assert_called_once_with('%windir%\\{}'.format(path))
+        self.assertEqual(path, response)
+
+    @mock.patch('os.path.expandvars')
+    def test_get_syswow64_dir(self, mock_expandvars):
+        path = "syswow64"
+        mock_expandvars.return_value = path
+        response = self._winutils.get_syswow64_dir()
+
+        mock_expandvars.assert_called_once_with('%windir%\\{}'.format(path))
+        self.assertEqual(path, response)
 
     @mock.patch('os.path.expandvars')
     def test_get_sysnative_dir(self, mock_expandvars):
-        mock_expandvars.return_value = 'fake_sysnative'
-
+        path = "sysnative"
+        mock_expandvars.return_value = path
         response = self._winutils.get_sysnative_dir()
 
-        self.assertEqual('fake_sysnative', response)
+        mock_expandvars.assert_called_once_with('%windir%\\{}'.format(path))
+        self.assertEqual(path, response)
 
     @mock.patch('cloudbaseinit.osutils.windows.WindowsUtils'
                 '.get_sysnative_dir')
@@ -1255,6 +1259,85 @@ class WindowsUtilsTest(unittest.TestCase):
         response = self._winutils.check_sysnative_dir_exists()
 
         self.assertTrue(response)
+
+    @mock.patch('cloudbaseinit.osutils.windows.WindowsUtils'
+                '.check_sysnative_dir_exists')
+    @mock.patch('cloudbaseinit.osutils.windows.WindowsUtils'
+                '.get_sysnative_dir')
+    @mock.patch('cloudbaseinit.osutils.windows.WindowsUtils'
+                '._is_64bit_arch')
+    @mock.patch('cloudbaseinit.osutils.windows.WindowsUtils'
+                '.get_syswow64_dir')
+    @mock.patch('cloudbaseinit.osutils.windows.WindowsUtils'
+                '.get_system32_dir')
+    def _test_get_system_dir(self, mock_get_system32_dir,
+                             mock_get_syswow64_dir,
+                             mock_is_64bit_arch,
+                             mock_get_sysnative_dir,
+                             mock_check_sysnative_dir_exists,
+                             sysnative, arches):
+        # settings
+        mock_get_system32_dir.return_value = "system32"
+        mock_get_syswow64_dir.return_value = "syswow64"
+        mock_get_sysnative_dir.return_value = "sysnative"
+        mock_is_64bit_arch.return_value = arches.startswith("64")
+        mock_check_sysnative_dir_exists.return_value = (arches == "32on64")
+        expect_dict = {
+            "32on32": {
+                False: (
+                    "system32",
+                    [mock_is_64bit_arch, mock_get_system32_dir]
+                ),
+                True: (
+                    "system32",
+                    [mock_check_sysnative_dir_exists,
+                     mock_get_system32_dir]
+                )
+            },
+            "32on64": {
+                False: (
+                    "system32",
+                    [mock_is_64bit_arch, mock_get_system32_dir]
+                ),
+                True: (
+                    "sysnative",
+                    [mock_check_sysnative_dir_exists,
+                     mock_get_sysnative_dir]
+                )
+            },
+            "64on64": {
+                False: (
+                    "syswow64",
+                    [mock_is_64bit_arch, mock_get_syswow64_dir]
+                ),
+                True: (
+                    "system32",
+                    [mock_check_sysnative_dir_exists,
+                     mock_get_system32_dir]
+                )
+            }
+        }
+        # actions
+        response = self._winutils._get_system_dir(sysnative=sysnative)
+        expect, calls = expect_dict[arches][sysnative]
+        self.assertEqual(expect, response)
+        for call in calls:
+            call.assert_called_once_with()
+
+    def test_get_system_dir_32on32(self):
+        arches = "32on32"
+        self._test_get_system_dir(sysnative=False, arches=arches)
+        self._test_get_system_dir(sysnative=True, arches=arches)
+
+    def test_get_system_dir_32on64(self):
+        arches = "32on64"
+        self._test_get_system_dir(sysnative=False, arches=arches)
+        self._test_get_system_dir(sysnative=True, arches=arches)
+
+    def test_get_system_dir_64on64(self):
+        arches = "64on64"
+        self._test_get_system_dir(sysnative=False, arches=arches)
+        self._test_get_system_dir(sysnative=True, arches=arches)
 
     @mock.patch('cloudbaseinit.osutils.windows.WindowsUtils'
                 '.check_sysnative_dir_exists')
@@ -1285,7 +1368,7 @@ class WindowsUtilsTest(unittest.TestCase):
         else:
             mock_get_system32_dir.assert_called_once_with()
 
-        mock_execute_process.assert_called_with(args, False)
+        mock_execute_process.assert_called_with(args, shell=False)
         self.assertEqual(mock_execute_process.return_value, response)
 
     def test_execute_powershell_script_sysnative(self):
@@ -1304,7 +1387,7 @@ class WindowsUtilsTest(unittest.TestCase):
 
         response = self._winutils.get_dhcp_hosts_in_use()
 
-        mock_get_adapter_addresses.assert_called()
+        mock_get_adapter_addresses.assert_called_once_with()
         self.assertEqual([('fake mac address', 'fake dhcp server')], response)
 
     @mock.patch('cloudbaseinit.osutils.windows.WindowsUtils'
@@ -1321,6 +1404,7 @@ class WindowsUtilsTest(unittest.TestCase):
                                     mock_check_sysnative_dir_exists,
                                     sysnative, ret_val):
         fake_base_dir = 'fake_dir'
+        ntp_hosts = ["first", "second"]
 
         mock_check_sysnative_dir_exists.return_value = sysnative
         mock_execute_process.return_value = (None, None, ret_val)
@@ -1328,7 +1412,8 @@ class WindowsUtilsTest(unittest.TestCase):
         mock_get_sysnative_dir.return_value = fake_base_dir
         mock_get_system32_dir.return_value = fake_base_dir
 
-        args = [w32tm_path, '/config', '/manualpeerlist:%s' % 'fake ntp host',
+        args = [w32tm_path, '/config',
+                '/manualpeerlist:%s' % ",".join(ntp_hosts),
                 '/syncfromflags:manual', '/update']
 
         if ret_val:
@@ -1337,14 +1422,14 @@ class WindowsUtilsTest(unittest.TestCase):
                               'fake ntp host')
 
         else:
-            self._winutils.set_ntp_client_config(ntp_host='fake ntp host')
+            self._winutils.set_ntp_client_config(ntp_hosts=ntp_hosts)
 
             if sysnative:
                 mock_get_sysnative_dir.assert_called_once_with()
             else:
                 mock_get_system32_dir.assert_called_once_with()
 
-            mock_execute_process.assert_called_once_with(args, False)
+            mock_execute_process.assert_called_once_with(args, shell=False)
 
     def test_set_ntp_client_config_sysnative_true(self):
         self._test_set_ntp_client_config(sysnative=True, ret_val=None)
@@ -1355,3 +1440,52 @@ class WindowsUtilsTest(unittest.TestCase):
     def test_set_ntp_client_config_sysnative_exception(self):
         self._test_set_ntp_client_config(sysnative=False,
                                          ret_val='fake return value')
+
+    @mock.patch('cloudbaseinit.osutils.windows.WindowsUtils.'
+                '_get_system_dir')
+    @mock.patch('cloudbaseinit.osutils.base.BaseOSUtils.'
+                'execute_process')
+    def test_execute_system32_process(self, mock_execute_process,
+                                      mock_get_system_dir):
+        mock_get_system_dir.return_value = 'base_dir'
+        mock_execute_process.return_value = mock.sentinel.execute_process
+        args = ['command', 'argument']
+
+        result = self._winutils.execute_system32_process(args)
+        mock_execute_process.assert_called_once_with(
+            [os.path.join('base_dir', args[0])] + args[1:],
+            decode_output=False,
+            shell=True)
+        self.assertEqual(mock.sentinel.execute_process, result)
+
+    def test_get_password_maximum_length(self):
+        self.assertEqual(20, self._winutils.get_maximum_password_length())
+
+    @mock.patch('cloudbaseinit.osutils.windows.windows_tz')
+    def test_set_timezone_fails(self, mock_windows_tz):
+        mock_windows_tz.tz_win.get.return_value = None
+
+        with self.assertRaises(exception.CloudbaseInitException) as cm:
+            self._winutils.set_timezone(mock.sentinel.timezone)
+        expected = (
+            "The given timezone name is unrecognised: %r"
+            % mock.sentinel.timezone
+        )
+        self.assertEqual(expected, str(cm.exception))
+        mock_windows_tz.tz_win.get.assert_called_once_with(
+            mock.sentinel.timezone)
+
+    @mock.patch('cloudbaseinit.osutils.windows.timezone')
+    @mock.patch('cloudbaseinit.osutils.windows.windows_tz')
+    def test_set_timezone(self, mock_windows_tz, mock_timezone):
+        mock_windows_tz.tz_win.get.return_value = (
+            mock.sentinel.windows_timezone)
+
+        self._winutils.set_timezone(mock.sentinel.timezone)
+
+        mock_windows_tz.tz_win.get.assert_called_once_with(
+            mock.sentinel.timezone)
+        mock_timezone.Timezone.assert_called_once_with(
+            mock.sentinel.windows_timezone)
+        mock_timezone.Timezone.return_value.set.assert_called_once_with(
+            self._winutils)

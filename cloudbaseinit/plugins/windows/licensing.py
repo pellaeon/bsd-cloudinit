@@ -19,7 +19,7 @@ from oslo.config import cfg
 from cloudbaseinit import exception
 from cloudbaseinit.openstack.common import log as logging
 from cloudbaseinit.osutils import factory as osutils_factory
-from cloudbaseinit.plugins import base
+from cloudbaseinit.plugins.common import base
 
 opts = [
     cfg.BoolOpt('activate_windows', default=False,
@@ -33,6 +33,7 @@ LOG = logging.getLogger(__name__)
 
 
 class WindowsLicensingPlugin(base.BasePlugin):
+
     def _run_slmgr(self, osutils, args):
         if osutils.check_sysnative_dir_exists():
             cscript_dir = osutils.get_sysnative_dir()
@@ -46,7 +47,7 @@ class WindowsLicensingPlugin(base.BasePlugin):
         slmgr_path = os.path.join(slmgr_dir, "slmgr.vbs")
 
         (out, err, exit_code) = osutils.execute_process(
-            [cscript_path, slmgr_path] + args, False)
+            [cscript_path, slmgr_path] + args, shell=False, decode_output=True)
 
         if exit_code:
             raise exception.CloudbaseInitException(

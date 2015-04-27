@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -15,13 +13,7 @@
 #    under the License.
 
 import setuptools
-import sys
-
-if sys.platform == 'win32':
-    platform_requirements = ['pywin32', 'comtypes', 'wmi']
-else:
-    platform_requirements = []
 
 setuptools.setup(
-    setup_requires=['pbr>=0.5.22,!=0.5.23'] + platform_requirements,
+    setup_requires=['pbr>=0.10'],
     pbr=True)

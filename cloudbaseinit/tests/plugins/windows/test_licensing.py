@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2014 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -14,17 +12,18 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import mock
 import os
 import unittest
 
-from oslo.config import cfg
+try:
+    import unittest.mock as mock
+except ImportError:
+    import mock
 
 from cloudbaseinit import exception
-from cloudbaseinit.plugins import base
+from cloudbaseinit.plugins.common import base
 from cloudbaseinit.plugins.windows import licensing
-
-CONF = cfg.CONF
+from cloudbaseinit.tests import testutils
 
 
 class WindowsLicensingPluginTests(unittest.TestCase):
@@ -64,7 +63,8 @@ class WindowsLicensingPluginTests(unittest.TestCase):
             get_system32_dir_calls.append(mock.call())
 
         mock_osutils.execute_process.assert_called_once_with(
-            [cscript_path, slmgr_path, 'fake args'], False)
+            [cscript_path, slmgr_path, 'fake args'],
+            shell=False, decode_output=True)
         self.assertEqual(get_system32_dir_calls,
                          mock_osutils.get_system32_dir.call_args_list)
 
@@ -84,10 +84,10 @@ class WindowsLicensingPluginTests(unittest.TestCase):
                       activate_windows):
         mock_osutils = mock.MagicMock()
         run_slmgr_calls = [mock.call(mock_osutils, ['/dlv'])]
-        CONF.set_override('activate_windows', activate_windows)
         mock_get_os_utils.return_value = mock_osutils
 
-        response = self._licensing.execute(service=None, shared_data=None)
+        with testutils.ConfPatcher('activate_windows', activate_windows):
+            response = self._licensing.execute(service=None, shared_data=None)
 
         mock_get_os_utils.assert_called_once_with()
         if activate_windows:

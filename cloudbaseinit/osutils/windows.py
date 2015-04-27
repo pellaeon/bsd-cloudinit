@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -14,34 +12,41 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+
 import ctypes
+from ctypes import wintypes
 import os
 import re
-import six
+import struct
 import time
+
+import pywintypes
+import six
+from six.moves import winreg
+from tzlocal import windows_tz
+from win32com import client
 import win32process
 import win32security
 import wmi
 
-from ctypes import windll
-from ctypes import wintypes
-from six.moves import winreg
-from win32com import client
-
 from cloudbaseinit import exception
 from cloudbaseinit.openstack.common import log as logging
 from cloudbaseinit.osutils import base
+from cloudbaseinit.utils import encoding
 from cloudbaseinit.utils.windows import network
+from cloudbaseinit.utils.windows import privilege
+from cloudbaseinit.utils.windows import timezone
+
 
 LOG = logging.getLogger(__name__)
 
-advapi32 = windll.advapi32
-kernel32 = windll.kernel32
-netapi32 = windll.netapi32
-userenv = windll.userenv
-iphlpapi = windll.iphlpapi
-Ws2_32 = windll.Ws2_32
-setupapi = windll.setupapi
+advapi32 = ctypes.windll.advapi32
+kernel32 = ctypes.windll.kernel32
+netapi32 = ctypes.windll.netapi32
+userenv = ctypes.windll.userenv
+iphlpapi = ctypes.windll.iphlpapi
+Ws2_32 = ctypes.windll.Ws2_32
+setupapi = ctypes.windll.setupapi
 msvcrt = ctypes.cdll.msvcrt
 
 
@@ -192,9 +197,8 @@ kernel32.DeviceIoControl.restype = wintypes.BOOL
 kernel32.GetProcessHeap.argtypes = []
 kernel32.GetProcessHeap.restype = wintypes.HANDLE
 
-# Note: wintypes.ULONG must be replaced with a 64 bit variable on x64
 kernel32.HeapAlloc.argtypes = [wintypes.HANDLE, wintypes.DWORD,
-                               wintypes.ULONG]
+                               ctypes.c_size_t]
 kernel32.HeapAlloc.restype = wintypes.LPVOID
 
 kernel32.HeapFree.argtypes = [wintypes.HANDLE, wintypes.DWORD,
@@ -295,24 +299,14 @@ class WindowsUtils(base.BaseOSUtils):
     _FW_SCOPE_ALL = 0
     _FW_SCOPE_LOCAL_SUBNET = 1
 
-    def _enable_shutdown_privilege(self):
-        process = win32process.GetCurrentProcess()
-        token = win32security.OpenProcessToken(
-            process,
-            win32security.TOKEN_ADJUST_PRIVILEGES |
-            win32security.TOKEN_QUERY)
-        priv_luid = win32security.LookupPrivilegeValue(
-            None, win32security.SE_SHUTDOWN_NAME)
-        privilege = [(priv_luid, win32security.SE_PRIVILEGE_ENABLED)]
-        win32security.AdjustTokenPrivileges(token, False, privilege)
-
     def reboot(self):
-        self._enable_shutdown_privilege()
-
-        ret_val = advapi32.InitiateSystemShutdownW(0, "Cloudbase-Init reboot",
-                                                   0, True, True)
-        if not ret_val:
-            raise exception.CloudbaseInitException("Reboot failed")
+        with privilege.acquire_privilege(win32security.SE_SHUTDOWN_NAME):
+            ret_val = advapi32.InitiateSystemShutdownW(
+                0, "Cloudbase-Init reboot",
+                0, True, True)
+            if not ret_val:
+                raise exception.WindowsCloudbaseInitException(
+                    "Reboot failed: %r")
 
     def _get_user_wmi_object(self, username):
         conn = wmi.WMI(moniker='//./root/cimv2')
@@ -326,24 +320,37 @@ class WindowsUtils(base.BaseOSUtils):
     def user_exists(self, username):
         return self._get_user_wmi_object(username) is not None
 
+    def _get_adsi_object(self, hostname='.', object_name=None,
+                         object_type='computer'):
+        adsi = client.Dispatch("ADsNameSpaces")
+        winnt = adsi.GetObject("", "WinNT:")
+        query = "WinNT://%s" % hostname
+        if object_name:
+            object_name_san = self.sanitize_shell_input(object_name)
+            query += "/%s" % object_name_san
+        query += ",%s" % object_type
+        return winnt.OpenDSObject(query, "", "", 0)
+
     def _create_or_change_user(self, username, password, create,
                                password_expires):
-        username_san = self.sanitize_shell_input(username)
-        password_san = self.sanitize_shell_input(password)
+        try:
+            if create:
+                host = self._get_adsi_object()
+                user = host.Create('user', username)
+            else:
+                user = self._get_adsi_object(object_name=username,
+                                             object_type='user')
 
-        args = ['NET', 'USER', username_san, password_san]
-        if create:
-            args.append('/ADD')
+            user.setpassword(password)
+            user.SetInfo()
 
-        (out, err, ret_val) = self.execute_process(args)
-        if not ret_val:
             self._set_user_password_expiration(username, password_expires)
-        else:
+        except pywintypes.com_error as ex:
             if create:
                 msg = "Create user failed: %s"
             else:
                 msg = "Set user password failed: %s"
-            raise exception.CloudbaseInitException(msg % err)
+            raise exception.CloudbaseInitException(msg % ex.excepinfo[2])
 
     def _sanitize_wmi_input(self, value):
         return value.replace('\'', '\'\'')
@@ -357,12 +364,12 @@ class WindowsUtils(base.BaseOSUtils):
         return True
 
     def create_user(self, username, password, password_expires=False):
-        self._create_or_change_user(username, password, True,
-                                    password_expires)
+        self._create_or_change_user(username, password, create=True,
+                                    password_expires=password_expires)
 
     def set_user_password(self, username, password, password_expires=False):
-        self._create_or_change_user(username, password, False,
-                                    password_expires)
+        self._create_or_change_user(username, password, create=False,
+                                    password_expires=password_expires)
 
     def _get_user_sid_and_domain(self, username):
         sid = ctypes.create_string_buffer(1024)
@@ -376,7 +383,8 @@ class WindowsUtils(base.BaseOSUtils):
             0, six.text_type(username), sid, ctypes.byref(cbSid), domainName,
             ctypes.byref(cchReferencedDomainName), ctypes.byref(sidNameUse))
         if not ret_val:
-            raise exception.CloudbaseInitException("Cannot get user SID")
+            raise exception.WindowsCloudbaseInitException(
+                "Cannot get user SID: %r")
 
         return (sid, domainName.value)
 
@@ -416,7 +424,8 @@ class WindowsUtils(base.BaseOSUtils):
                                       six.text_type(password), 2, 0,
                                       ctypes.byref(token))
         if not ret_val:
-            raise exception.CloudbaseInitException("User logon failed")
+            raise exception.WindowsCloudbaseInitException(
+                "User logon failed: %r")
 
         if load_profile:
             pi = Win32_PROFILEINFO()
@@ -425,8 +434,8 @@ class WindowsUtils(base.BaseOSUtils):
             ret_val = userenv.LoadUserProfileW(token, ctypes.byref(pi))
             if not ret_val:
                 kernel32.CloseHandle(token)
-                raise exception.CloudbaseInitException(
-                    "Cannot load user profile")
+                raise exception.WindowsCloudbaseInitException(
+                    "Cannot load user profile: %r")
 
         return token
 
@@ -451,10 +460,12 @@ class WindowsUtils(base.BaseOSUtils):
             self.ComputerNamePhysicalDnsHostname,
             six.text_type(new_host_name))
         if not ret_val:
-            raise exception.CloudbaseInitException("Cannot set host name")
+            raise exception.WindowsCloudbaseInitException(
+                "Cannot set host name: %r")
+        return True
 
     def get_network_adapters(self):
-        l = []
+        """Return available adapters as a list of tuples of (name, mac)."""
         conn = wmi.WMI(moniker='//./root/cimv2')
         # Get Ethernet adapters only
         wql = ('SELECT * FROM Win32_NetworkAdapter WHERE '
@@ -464,9 +475,7 @@ class WindowsUtils(base.BaseOSUtils):
             wql += ' AND PhysicalAdapter = True'
 
         q = conn.query(wql)
-        for r in q:
-            l.append(r.Name)
-        return l
+        return [(r.Name, r.MACAddress) for r in q]
 
     def get_dhcp_hosts_in_use(self):
         dhcp_hosts = []
@@ -476,14 +485,18 @@ class WindowsUtils(base.BaseOSUtils):
                                    net_addr["dhcp_server"]))
         return dhcp_hosts
 
-    def set_ntp_client_config(self, ntp_host):
+    def set_ntp_client_config(self, ntp_hosts):
         base_dir = self._get_system_dir()
         w32tm_path = os.path.join(base_dir, "w32tm.exe")
 
-        args = [w32tm_path, '/config', '/manualpeerlist:%s' % ntp_host,
+        # Convert the NTP hosts list to a string, in order to pass
+        # it to w32tm.
+        ntp_hosts = ",".join(ntp_hosts)
+
+        args = [w32tm_path, '/config', '/manualpeerlist:%s' % ntp_hosts,
                 '/syncfromflags:manual', '/update']
 
-        (out, err, ret_val) = self.execute_process(args, False)
+        (out, err, ret_val) = self.execute_process(args, shell=False)
         if ret_val:
             raise exception.CloudbaseInitException(
                 'w32tm failed to configure NTP.\nOutput: %(out)s\nError:'
@@ -517,21 +530,19 @@ class WindowsUtils(base.BaseOSUtils):
             args = [netsh_path, "interface", "ipv4", "set", "subinterface",
                     str(iface_index), "mtu=%s" % mtu,
                     "store=persistent"]
-            (out, err, ret_val) = self.execute_process(args, False)
+            (out, err, ret_val) = self.execute_process(args, shell=False)
             if ret_val:
                 raise exception.CloudbaseInitException(
                     'Setting MTU for interface "%(mac_address)s" with '
                     'value "%(mtu)s" failed' % {'mac_address': mac_address,
                                                 'mtu': mtu})
 
-    def set_static_network_config(self, adapter_name, address, netmask,
+    def set_static_network_config(self, mac_address, address, netmask,
                                   broadcast, gateway, dnsnameservers):
         conn = wmi.WMI(moniker='//./root/cimv2')
 
-        adapter_name_san = self._sanitize_wmi_input(adapter_name)
-        q = conn.query('SELECT * FROM Win32_NetworkAdapter WHERE '
-                       'MACAddress IS NOT NULL AND '
-                       'Name = \'%s\'' % adapter_name_san)
+        q = conn.query("SELECT * FROM Win32_NetworkAdapter WHERE "
+                       "MACAddress = '{}'".format(mac_address))
         if not len(q):
             raise exception.CloudbaseInitException(
                 "Network adapter not found")
@@ -546,19 +557,21 @@ class WindowsUtils(base.BaseOSUtils):
                 "Cannot set static IP address on network adapter")
         reboot_required = (ret_val == 1)
 
-        LOG.debug("Setting static gateways")
-        (ret_val,) = adapter_config.SetGateways([gateway], [1])
-        if ret_val > 1:
-            raise exception.CloudbaseInitException(
-                "Cannot set gateway on network adapter")
-        reboot_required = reboot_required or ret_val == 1
+        if gateway:
+            LOG.debug("Setting static gateways")
+            (ret_val,) = adapter_config.SetGateways([gateway], [1])
+            if ret_val > 1:
+                raise exception.CloudbaseInitException(
+                    "Cannot set gateway on network adapter")
+            reboot_required = reboot_required or ret_val == 1
 
-        LOG.debug("Setting static DNS servers")
-        (ret_val,) = adapter_config.SetDNSServerSearchOrder(dnsnameservers)
-        if ret_val > 1:
-            raise exception.CloudbaseInitException(
-                "Cannot set DNS on network adapter")
-        reboot_required = reboot_required or ret_val == 1
+        if dnsnameservers:
+            LOG.debug("Setting static DNS servers")
+            (ret_val,) = adapter_config.SetDNSServerSearchOrder(dnsnameservers)
+            if ret_val > 1:
+                raise exception.CloudbaseInitException(
+                    "Cannot set DNS on network adapter")
+            reboot_required = reboot_required or ret_val == 1
 
         return reboot_required
 
@@ -677,7 +690,7 @@ class WindowsUtils(base.BaseOSUtils):
         heap = kernel32.GetProcessHeap()
 
         size = wintypes.ULONG(ctypes.sizeof(Win32_MIB_IPFORWARDTABLE))
-        p = kernel32.HeapAlloc(heap, 0, size)
+        p = kernel32.HeapAlloc(heap, 0, ctypes.c_size_t(size.value))
         if not p:
             raise exception.CloudbaseInitException(
                 'Unable to allocate memory for the IP forward table')
@@ -689,7 +702,7 @@ class WindowsUtils(base.BaseOSUtils):
                                              ctypes.byref(size), 0)
             if err == self.ERROR_INSUFFICIENT_BUFFER:
                 kernel32.HeapFree(heap, 0, p_forward_table)
-                p = kernel32.HeapAlloc(heap, 0, size)
+                p = kernel32.HeapAlloc(heap, 0, ctypes.c_size_t(size.value))
                 if not p:
                     raise exception.CloudbaseInitException(
                         'Unable to allocate memory for the IP forward table')
@@ -713,9 +726,12 @@ class WindowsUtils(base.BaseOSUtils):
                 while i < forward_table.dwNumEntries:
                     row = table[i]
                     routing_table.append((
-                        Ws2_32.inet_ntoa(row.dwForwardDest),
-                        Ws2_32.inet_ntoa(row.dwForwardMask),
-                        Ws2_32.inet_ntoa(row.dwForwardNextHop),
+                        encoding.get_as_string(Ws2_32.inet_ntoa(
+                            row.dwForwardDest)),
+                        encoding.get_as_string(Ws2_32.inet_ntoa(
+                            row.dwForwardMask)),
+                        encoding.get_as_string(Ws2_32.inet_ntoa(
+                            row.dwForwardNextHop)),
                         row.dwForwardIfIndex,
                         row.dwForwardMetric1))
                     i += 1
@@ -803,8 +819,8 @@ class WindowsUtils(base.BaseOSUtils):
         buf = ctypes.create_unicode_buffer(buf_size + 1)
         buf_len = kernel32.GetLogicalDriveStringsW(buf_size, buf)
         if not buf_len:
-            raise exception.CloudbaseInitException(
-                "GetLogicalDriveStringsW failed")
+            raise exception.WindowsCloudbaseInitException(
+                "GetLogicalDriveStringsW failed: %r")
 
         return self._split_str_buf_list(buf, buf_len)
 
@@ -812,6 +828,10 @@ class WindowsUtils(base.BaseOSUtils):
         drives = self._get_logical_drives()
         return [d for d in drives if kernel32.GetDriveTypeW(d) ==
                 self.DRIVE_CDROM]
+
+    def _is_64bit_arch(self):
+        # interpreter's bits
+        return struct.calcsize("P") == 8
 
     def get_physical_disks(self):
         physical_disks = []
@@ -841,25 +861,27 @@ class WindowsUtils(base.BaseOSUtils):
                         ctypes.byref(required_size), None):
                     if (kernel32.GetLastError() !=
                             self.ERROR_INSUFFICIENT_BUFFER):
-                        raise exception.CloudbaseInitException(
-                            "SetupDiGetDeviceInterfaceDetailW failed")
+                        raise exception.WindowsCloudbaseInitException(
+                            "SetupDiGetDeviceInterfaceDetailW failed: %r")
 
                 pdidd = ctypes.cast(
-                    msvcrt.malloc(required_size),
+                    msvcrt.malloc(ctypes.c_size_t(required_size.value)),
                     ctypes.POINTER(Win32_SP_DEVICE_INTERFACE_DETAIL_DATA_W))
 
                 try:
-                    # NOTE(alexpilotti): the size provided by ctypes.sizeof
-                    # is not the expected one
-                    # pdidd.contents.cbSize = ctypes.sizeof(
-                    #    Win32_SP_DEVICE_INTERFACE_DETAIL_DATA_W)
-                    pdidd.contents.cbSize = 6
+                    pdidd.contents.cbSize = ctypes.sizeof(
+                        Win32_SP_DEVICE_INTERFACE_DETAIL_DATA_W)
+                    if not self._is_64bit_arch():
+                        # NOTE(cpoieana): For some reason, on x86 platforms
+                        # the alignment or content of the struct
+                        # is not taken into consideration.
+                        pdidd.contents.cbSize = 6
 
                     if not setupapi.SetupDiGetDeviceInterfaceDetailW(
                             handle_disks, ctypes.byref(did), pdidd,
                             required_size, None, None):
-                        raise exception.CloudbaseInitException(
-                            "SetupDiGetDeviceInterfaceDetailW failed")
+                        raise exception.WindowsCloudbaseInitException(
+                            "SetupDiGetDeviceInterfaceDetailW failed: %r")
 
                     device_path = ctypes.cast(
                         pdidd.contents.DevicePath, wintypes.LPWSTR).value
@@ -878,8 +900,8 @@ class WindowsUtils(base.BaseOSUtils):
                             handle_disk, self.IOCTL_STORAGE_GET_DEVICE_NUMBER,
                             None, 0, ctypes.byref(sdn), ctypes.sizeof(sdn),
                             ctypes.byref(b), None):
-                        raise exception.CloudbaseInitException(
-                            'DeviceIoControl failed')
+                        raise exception.WindowsCloudbaseInitException(
+                            'DeviceIoControl failed: %r')
 
                     physical_disks.append(
                         r"\\.\PHYSICALDRIVE%d" % sdn.DeviceNumber)
@@ -927,14 +949,13 @@ class WindowsUtils(base.BaseOSUtils):
         fw_profile = fw_profile.GloballyOpenPorts.Remove(port, fw_protocol)
 
     def is_wow64(self):
-        ret_val = wintypes.BOOL()
-        if not kernel32.IsWow64Process(kernel32.GetCurrentProcess(),
-                                       ctypes.byref(ret_val)):
-            raise exception.CloudbaseInitException("IsWow64Process failed")
-        return bool(ret_val.value)
+        return win32process.IsWow64Process()
 
     def get_system32_dir(self):
         return os.path.expandvars('%windir%\\system32')
+
+    def get_syswow64_dir(self):
+        return os.path.expandvars('%windir%\\syswow64')
 
     def get_sysnative_dir(self):
         return os.path.expandvars('%windir%\\sysnative')
@@ -948,10 +969,56 @@ class WindowsUtils(base.BaseOSUtils):
         return sysnative_dir_exists
 
     def _get_system_dir(self, sysnative=True):
+        """Return Windows system directory with compatibility support.
+
+        Depending on the interpreter bits and platform architecture,
+        the return value may vary between
+        C:\Windows\(System32|SysWOW64|Sysnative).
+        Note that "Sysnative" is just an alias (doesn't really exist on disk).
+
+        On 32bit OSes, the return value will be the System32 directory,
+        which contains 32bit programs.
+        On 64bit OSes, the return value may be different, depending on the
+        Python bits and the `sysnative` parameter. If the Python interpreter is
+        32bit, the return value will be System32 (containing 32bit
+        programs) if `sysnative` is set to False and Sysnative otherwise. But
+        if the Python interpreter is 64bit and `sysnative` is False, the return
+        value will be SysWOW64 and System32 for a True value of `sysnative`.
+
+        Why this behavior and what is the purpose of `sysnative` parameter?
+
+        On a 32bit OS the things are clear, there is one System32 directory
+        containing 32bit applications and that's all. On a 64bit OS, there's a
+        System32 directory containing 64bit applications and a compatibility
+        one named SysWOW64 (WindowsOnWindows) containing the 32bit version of
+        them. Depending on the Python interpreter's bits, the `sysnative` flag
+        will try to bring the appropriate version of the system directory, more
+        exactly, the physical System32 or SysWOW64 found on disk. On a WOW case
+        (32bit interpreter on 64bit OS), a return value of System32 will point
+        to the physical SysWOW64 directory and a return value of Sysnative,
+        which is consolidated by the existence of this alias, will point to the
+        real physical System32 directory found on disk. If the OS is still
+        64bit and there is no WOW case (that means the interpreter is 64bit),
+        the system native concept is out of discussion and each return value
+        will point to the physical location it intends to.
+
+        On a 32bit OS the `sysnative` parameter has no meaning, but on a 64bit
+        one, based on its value, it will provide a real/alias path pointing to
+        system native applications if set to True (64bit programs) and to
+        system compatibility applications if set to False (32bit programs). Its
+        purpose is to provide the correct system paths by taking into account
+        the Python interpreter bits too, because on a 32bit interpreter
+        version, System32 is not the same with the System32 on a 64bit
+        interpreter. Also, using a 64bit interpreter, the Sysnative alias will
+        not work, but the `sysnative` parameter will take care to return
+        SysWOW64 if you explicitly want 32bit applications, by setting it to
+        False.
+        """
         if sysnative and self.check_sysnative_dir_exists():
             return self.get_sysnative_dir()
-        else:
-            return self.get_system32_dir()
+        if not sysnative and self._is_64bit_arch():
+            return self.get_syswow64_dir()
+        return self.get_system32_dir()
 
     def execute_powershell_script(self, script_path, sysnative=True):
         base_dir = self._get_system_dir(sysnative)
@@ -962,4 +1029,21 @@ class WindowsUtils(base.BaseOSUtils):
         args = [powershell_path, '-ExecutionPolicy', 'RemoteSigned',
                 '-NonInteractive', '-File', script_path]
 
-        return self.execute_process(args, False)
+        return self.execute_process(args, shell=False)
+
+    def execute_system32_process(self, args, shell=True, decode_output=False,
+                                 sysnative=True):
+        base_dir = self._get_system_dir(sysnative)
+        process_path = os.path.join(base_dir, args[0])
+        return self.execute_process([process_path] + args[1:],
+                                    decode_output=decode_output, shell=shell)
+
+    def get_maximum_password_length(self):
+        return 20
+
+    def set_timezone(self, timezone_name):
+        windows_name = windows_tz.tz_win.get(timezone_name)
+        if not windows_name:
+            raise exception.CloudbaseInitException(
+                "The given timezone name is unrecognised: %r" % timezone_name)
+        timezone.Timezone(windows_name).set(self)

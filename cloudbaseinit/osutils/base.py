@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -17,6 +15,7 @@
 import base64
 import os
 import subprocess
+import sys
 
 
 class BaseOSUtils(object):
@@ -33,14 +32,20 @@ class BaseOSUtils(object):
         # On Windows os.urandom() uses CryptGenRandom, which is a
         # cryptographically secure pseudorandom number generator
         b64_password = base64.b64encode(os.urandom(256))
-        return b64_password.replace('/', '').replace('+', '')[:length]
+        return b64_password.replace(
+            b'/', b'').replace(b'+', b'')[:length].decode()
 
-    def execute_process(self, args, shell=True):
+    def execute_process(self, args, shell=True, decode_output=False):
         p = subprocess.Popen(args,
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE,
                              shell=shell)
         (out, err) = p.communicate()
+
+        if decode_output and sys.version_info < (3, 0):
+            out = out.decode(sys.stdout.encoding)
+            err = err.decode(sys.stdout.encoding)
+
         return (out, err, p.returncode)
 
     def sanitize_shell_input(self, value):
@@ -64,7 +69,7 @@ class BaseOSUtils(object):
     def get_network_adapters(self):
         raise NotImplementedError()
 
-    def set_static_network_config(self, adapter_name, address, netmask,
+    def set_static_network_config(self, mac_address, address, netmask,
                                   broadcast, gateway, dnsnameservers):
         raise NotImplementedError()
 
@@ -100,4 +105,12 @@ class BaseOSUtils(object):
         raise NotImplementedError()
 
     def firewall_remove_rule(self, name, port, protocol, allow=True):
+        raise NotImplementedError()
+
+    def get_maximum_password_length(self):
+        """Obtain the maximum password length tailored for each OS."""
+        raise NotImplementedError()
+
+    def set_timezone(self, timezone):
+        """Set the timezone for this instance."""
         raise NotImplementedError()

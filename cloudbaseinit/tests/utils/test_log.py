@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2014 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -15,16 +13,20 @@
 #    under the License.
 
 import importlib
-import mock
-import six
 import unittest
 
+try:
+    import unittest.mock as mock
+except ImportError:
+    import mock
 from oslo.config import cfg
+import six
 
 CONF = cfg.CONF
 
 
 class SerialPortHandlerTests(unittest.TestCase):
+
     def setUp(self):
         self._serial = mock.MagicMock()
         self._stream = mock.MagicMock()
@@ -36,6 +38,7 @@ class SerialPortHandlerTests(unittest.TestCase):
 
         self.log = importlib.import_module("cloudbaseinit.utils.log")
 
+        self._old_value = CONF.get('logging_serial_port_settings')
         CONF.set_override('logging_serial_port_settings', "COM1,115200,N,8")
         self._serial_port_handler = self.log.SerialPortHandler()
         self._unicode_stream = self._serial_port_handler._UnicodeToBytesStream(
@@ -44,6 +47,7 @@ class SerialPortHandlerTests(unittest.TestCase):
 
     def tearDown(self):
         self._module_patcher.stop()
+        CONF.set_override('logging_serial_port_settings', self._old_value)
 
     def test_init(self):
         mock_Serial = self._serial.Serial

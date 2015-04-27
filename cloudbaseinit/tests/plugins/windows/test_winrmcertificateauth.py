@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -15,19 +13,21 @@
 #    under the License.
 
 import importlib
-import mock
 import unittest
 
+try:
+    import unittest.mock as mock
+except ImportError:
+    import mock
+
 from cloudbaseinit import exception
-from cloudbaseinit.plugins import base
-from cloudbaseinit.plugins import constants
-
-from oslo.config import cfg
-
-CONF = cfg.CONF
+from cloudbaseinit.plugins.common import base
+from cloudbaseinit.plugins.common import constants
+from cloudbaseinit.tests import testutils
 
 
 class ConfigWinRMCertificateAuthPluginTests(unittest.TestCase):
+
     def setUp(self):
         self._ctypes_mock = mock.MagicMock()
         self._win32com_mock = mock.MagicMock()
@@ -52,35 +52,41 @@ class ConfigWinRMCertificateAuthPluginTests(unittest.TestCase):
     def tearDown(self):
         self._module_patcher.stop()
 
-    def _test_get_credentials(self, fake_user, fake_password):
-        mock_shared_data = mock.MagicMock()
-        mock_shared_data.get.side_effect = [fake_user, fake_password]
-        if fake_user is None or fake_password is None:
-            self.assertRaises(exception.CloudbaseInitException,
-                              self._certif_auth._get_credentials,
-                              mock_shared_data)
-        else:
-            response = self._certif_auth._get_credentials(mock_shared_data)
-            expected = [mock.call(constants.SHARED_DATA_USERNAME),
-                        mock.call(constants.SHARED_DATA_PASSWORD)]
-            self.assertEqual(expected, mock_shared_data.get.call_args_list)
+    @testutils.ConfPatcher('username', '')
+    def test_get_credentials_no_username(self):
+        with self.assertRaises(exception.CloudbaseInitException) as cm:
+            self._certif_auth._get_credentials(mock.sentinel.service, {})
 
-            mock_shared_data.__setitem__.assert_called_once_with(
-                'admin_password', None)
+        expected_message = (
+            "Cannot execute plugin as the username has not been set in "
+            "the plugins shared data, nor it was found in config file.")
+        self.assertEqual(expected_message, str(cm.exception))
 
-            self.assertEqual((fake_user, fake_password), response)
+    def test_get_credentials_no_password(self):
+        mock_service = mock.Mock()
+        mock_service.get_admin_password.return_value = None
 
-    def test_test_get_credentials(self):
-        self._test_get_credentials(fake_user='fake user',
-                                   fake_password='fake password')
+        with self.assertRaises(exception.CloudbaseInitException) as cm:
+            self._certif_auth._get_credentials(mock_service, {})
 
-    def test_test_get_credentials_no_user(self):
-        self._test_get_credentials(fake_user=None,
-                                   fake_password='fake password')
+        expected_message = (
+            "Cannot execute plugin as the password has not been set "
+            "in the plugins shared data, nor it was retrieved "
+            "from the metadata service.")
+        self.assertEqual(expected_message, str(cm.exception))
+        mock_service.get_admin_password.assert_called_once_with()
 
-    def test_test_get_credentials_no_password(self):
-        self._test_get_credentials(fake_user='fake user',
-                                   fake_password=None)
+    def test_get_credentials_get_admin_password(self):
+        mock_service = mock.Mock()
+        mock_service.get_admin_password.return_value = mock.sentinel.password
+        shared_data = {constants.SHARED_DATA_USERNAME: mock.sentinel.username}
+
+        result = self._certif_auth._get_credentials(mock_service, shared_data)
+
+        self.assertIsNone(shared_data[constants.SHARED_DATA_PASSWORD])
+        self.assertEqual((mock.sentinel.username, mock.sentinel.password),
+                         result)
+        mock_service.get_admin_password.assert_called_once_with()
 
     @mock.patch('cloudbaseinit.plugins.windows.winrmcertificateauth'
                 '.ConfigWinRMCertificateAuthPlugin._get_credentials')
@@ -128,7 +134,8 @@ class ConfigWinRMCertificateAuthPluginTests(unittest.TestCase):
             self.assertEqual(expected_set_token_calls,
                              set_uac_rs.call_args_list)
 
-            mock_get_credentials.assert_called_once_with('fake data')
+            mock_get_credentials.assert_called_once_with(
+                mock_service, 'fake data')
             mock_import_cert.assert_called_once_with(
                 cert_data, store_name=self.winrmcert.x509.STORE_NAME_ROOT)
 

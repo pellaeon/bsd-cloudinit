@@ -1,6 +1,4 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
-# Copyright 2013 Cloudbase Solutions Srl
+# Copyright 2015 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -14,15 +12,15 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import mock
 import unittest
 
-from oslo.config import cfg
+try:
+    import unittest.mock as mock
+except ImportError:
+    import mock
 
-from cloudbaseinit.plugins import base
 from cloudbaseinit.plugins.windows import createuser
-
-CONF = cfg.CONF
+from cloudbaseinit.tests import testutils
 
 
 class CreateUserPluginTests(unittest.TestCase):
@@ -30,49 +28,65 @@ class CreateUserPluginTests(unittest.TestCase):
     def setUp(self):
         self._create_user = createuser.CreateUserPlugin()
 
-    def test_get_password(self):
-        mock_osutils = mock.MagicMock()
-        mock_osutils.generate_random_password.return_value = 'fake password'
-        response = self._create_user._get_password(mock_osutils)
-        mock_osutils.generate_random_password.assert_called_once_with(14)
-        self.assertEqual('fake password', response)
+    def test_create_user(self):
+        mock_osutils = mock.Mock()
+        self._create_user.create_user(
+            mock.sentinel.username,
+            mock.sentinel.password,
+            mock_osutils)
 
-    @mock.patch('cloudbaseinit.osutils.factory.get_os_utils')
-    @mock.patch('cloudbaseinit.plugins.windows.createuser.CreateUserPlugin'
-                '._get_password')
-    def _test_execute(self, mock_get_password, mock_get_os_utils,
-                      user_exists=True):
-        CONF.set_override('groups', ['Admins'])
-        shared_data = {}
-        mock_token = mock.MagicMock()
-        mock_osutils = mock.MagicMock()
-        mock_service = mock.MagicMock()
-        mock_get_password.return_value = 'password'
-        mock_get_os_utils.return_value = mock_osutils
-        mock_osutils.user_exists.return_value = user_exists
+        mock_osutils.create_user.assert_called_once_with(
+            mock.sentinel.username,
+            mock.sentinel.password)
+
+    @mock.patch('cloudbaseinit.plugins.windows.createuser.CreateUserPlugin.'
+                '_create_user_logon')
+    def test_post_create_user(self, mock_create_user_logon):
+        mock_osutils = mock.Mock()
+        self._create_user.post_create_user(
+            mock.sentinel.username,
+            mock.sentinel.password,
+            mock_osutils)
+
+        mock_create_user_logon.assert_called_once_with(
+            mock.sentinel.username,
+            mock.sentinel.password,
+            mock_osutils)
+
+    def test__create_user_logon(self):
+        mock_osutils = mock.Mock()
+        mock_token = mock.sentinel.token
         mock_osutils.create_user_logon_session.return_value = mock_token
 
-        response = self._create_user.execute(mock_service, shared_data)
+        self._create_user._create_user_logon(
+            mock.sentinel.user_name,
+            mock.sentinel.password,
+            mock_osutils)
 
-        mock_get_os_utils.assert_called_once_with()
-        mock_get_password.assert_called_once_with(mock_osutils)
-        mock_osutils.user_exists.assert_called_once_with(CONF.username)
-        if user_exists:
-            mock_osutils.set_user_password.assert_called_once_with(
-                CONF.username, 'password')
-        else:
-            mock_osutils.create_user.assert_called_once_with(CONF.username,
-                                                             'password')
-            mock_osutils.create_user_logon_session.assert_called_once_with(
-                CONF.username, 'password', True)
-            mock_osutils.close_user_logon_session.assert_called_once_with(
-                mock_token)
-        mock_osutils.add_user_to_local_group.assert_called_once_with(
-            CONF.username, CONF.groups[0])
-        self.assertEqual((base.PLUGIN_EXECUTION_DONE, False), response)
+        mock_osutils.create_user_logon_session.assert_called_once_with(
+            mock.sentinel.user_name,
+            mock.sentinel.password,
+            True)
+        mock_osutils.close_user_logon_session.assert_called_once_with(
+            mock_token)
 
-    def test_execute_user_exists(self):
-        self._test_execute(user_exists=True)
+    def test__create_user_logon_fails(self):
+        mock_osutils = mock.Mock()
+        mock_osutils.create_user_logon_session.side_effect = Exception
 
-    def test_execute_no_user(self):
-        self._test_execute(user_exists=False)
+        with testutils.LogSnatcher('cloudbaseinit.plugins.windows.'
+                                   'createuser') as snatcher:
+            self._create_user._create_user_logon(
+                mock.sentinel.user_name,
+                mock.sentinel.password,
+                mock_osutils)
+
+        mock_osutils.create_user_logon_session.assert_called_once_with(
+            mock.sentinel.user_name,
+            mock.sentinel.password,
+            True)
+        self.assertFalse(mock_osutils.close_user_logon_session.called)
+        logging_message = (
+            "Cannot create a user logon session for user: \"%s\""
+            % mock.sentinel.user_name)
+        self.assertTrue(snatcher.output[0].startswith(logging_message))

@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -15,17 +13,21 @@
 #    under the License.
 
 import importlib
-import mock
 import os
 import unittest
 import uuid
 
+try:
+    import unittest.mock as mock
+except ImportError:
+    import mock
 from oslo.config import cfg
 
 CONF = cfg.CONF
 
 
 class ConfigDriveServiceTest(unittest.TestCase):
+
     def setUp(self):
         self._win32com_mock = mock.MagicMock()
         self._ctypes_mock = mock.MagicMock()
@@ -66,7 +68,10 @@ class ConfigDriveServiceTest(unittest.TestCase):
         mock_gettempdir.assert_called_once_with()
         mock_get_config_drive_manager.assert_called_once_with()
         mock_manager.get_config_drive_files.assert_called_once_with(
-            fake_path, CONF.config_drive_raw_hhd, CONF.config_drive_cdrom)
+            fake_path,
+            check_raw_hhd=CONF.config_drive_raw_hhd,
+            check_cdrom=CONF.config_drive_cdrom,
+            check_vfat=CONF.config_drive_vfat)
         self.assertTrue(response)
         self.assertEqual(fake_path, self._config_drive._metadata_path)
 

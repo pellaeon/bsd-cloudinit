@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -86,8 +84,8 @@ class PhysicalDisk(object):
                 ctypes.byref(bytes_returned),
                 0)
             if not ret_val:
-                raise exception.CloudbaseInitException(
-                    "Cannot get disk geometry")
+                raise exception.WindowsCloudbaseInitException(
+                    "Cannot get disk geometry: %r")
             self._geom = geom
         return self._geom
 
@@ -107,5 +105,6 @@ class PhysicalDisk(object):
         ret_val = kernel32.ReadFile(self._handle, buf, bytes_to_read,
                                     ctypes.byref(bytes_read), 0)
         if not ret_val:
-            raise exception.CloudbaseInitException("Read exception")
+            raise exception.WindowsCloudbaseInitException(
+                "Read exception: %r")
         return (buf, bytes_read.value)

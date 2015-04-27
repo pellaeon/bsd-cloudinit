@@ -13,9 +13,8 @@
 #    under the License.
 
 import posixpath
-import time
 
-from oauth import oauth
+from oauthlib import oauth1
 from oslo.config import cfg
 from six.moves.urllib import error
 from six.moves.urllib import request
@@ -43,6 +42,17 @@ CONF.register_opts(opts)
 LOG = logging.getLogger(__name__)
 
 
+class _Realm(str):
+    # There's a bug in oauthlib which ignores empty realm strings,
+    # by checking that the given realm is always True.
+    # This string class always returns True in a boolean context,
+    # making sure that an empty realm can be used by oauthlib.
+    def __bool__(self):
+        return True
+
+    __nonzero__ = __bool__
+
+
 class MaaSHttpService(base.BaseMetadataService):
     _METADATA_2012_03_01 = '2012-03-01'
 
@@ -58,7 +68,7 @@ class MaaSHttpService(base.BaseMetadataService):
             LOG.debug('MaaS metadata url not set')
         else:
             try:
-                self._get_data('%s/meta-data/' % self._metadata_version)
+                self._get_cache_data('%s/meta-data/' % self._metadata_version)
                 return True
             except Exception as ex:
                 LOG.exception(ex)
@@ -76,22 +86,15 @@ class MaaSHttpService(base.BaseMetadataService):
                 raise
 
     def _get_oauth_headers(self, url):
-        consumer = oauth.OAuthConsumer(CONF.maas_oauth_consumer_key,
-                                       CONF.maas_oauth_consumer_secret)
-        token = oauth.OAuthToken(CONF.maas_oauth_token_key,
-                                 CONF.maas_oauth_token_secret)
-
-        parameters = {'oauth_version': "1.0",
-                      'oauth_nonce': oauth.generate_nonce(),
-                      'oauth_timestamp': int(time.time()),
-                      'oauth_token': token.key,
-                      'oauth_consumer_key': consumer.key}
-
-        req = oauth.OAuthRequest(http_url=url, parameters=parameters)
-        req.sign_request(oauth.OAuthSignatureMethod_PLAINTEXT(), consumer,
-                         token)
-
-        return req.to_header()
+        client = oauth1.Client(
+            CONF.maas_oauth_consumer_key,
+            client_secret=CONF.maas_oauth_consumer_secret,
+            resource_owner_key=CONF.maas_oauth_token_key,
+            resource_owner_secret=CONF.maas_oauth_token_secret,
+            signature_method=oauth1.SIGNATURE_PLAINTEXT)
+        realm = _Realm("")
+        headers = client.sign(url, realm=realm)[1]
+        return headers
 
     def _get_data(self, path):
         norm_path = posixpath.join(CONF.maas_metadata_url, path)

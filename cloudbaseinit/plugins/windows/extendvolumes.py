@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright (c) 2013 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -20,7 +18,7 @@ import re
 from oslo.config import cfg
 
 from cloudbaseinit.openstack.common import log as logging
-from cloudbaseinit.plugins import base
+from cloudbaseinit.plugins.common import base
 from cloudbaseinit.utils.windows import vds
 
 ole32 = ctypes.windll.ole32
@@ -44,6 +42,7 @@ LOG = logging.getLogger(__name__)
 
 
 class ExtendVolumesPlugin(base.BasePlugin):
+
     def _extend_volumes(self, pack, volume_idxs=None):
         enum = pack.QueryVolumes()
         while True:

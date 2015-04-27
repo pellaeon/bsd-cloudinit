@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -14,19 +12,23 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import mock
 import sys
 import unittest
 
+try:
+    import unittest.mock as mock
+except ImportError:
+    import mock
 from oslo.config import cfg
 
 from cloudbaseinit import init
-from cloudbaseinit.plugins import base
+from cloudbaseinit.plugins.common import base
 
 CONF = cfg.CONF
 
 
 class InitManagerTest(unittest.TestCase):
+
     def setUp(self):
         self._win32com_mock = mock.MagicMock()
         self._comtypes_mock = mock.MagicMock()
@@ -136,7 +138,7 @@ class InitManagerTest(unittest.TestCase):
     @mock.patch('cloudbaseinit.init.InitManager'
                 '._check_plugin_os_requirements')
     @mock.patch('cloudbaseinit.init.InitManager._exec_plugin')
-    @mock.patch('cloudbaseinit.plugins.factory.load_plugins')
+    @mock.patch('cloudbaseinit.plugins.common.factory.load_plugins')
     @mock.patch('cloudbaseinit.osutils.factory.get_os_utils')
     @mock.patch('cloudbaseinit.metadata.factory.get_metadata_service')
     def test_configure_host(self, mock_get_metadata_service,
@@ -153,7 +155,7 @@ class InitManagerTest(unittest.TestCase):
 
         self._init.configure_host()
 
-        self.osutils.wait_for_boot_completion.assert_called_once()
+        self.osutils.wait_for_boot_completion.assert_called_once_with()
         mock_get_metadata_service.assert_called_once_with()
         fake_service.get_name.assert_called_once_with()
         mock_check_os_requirements.assert_called_once_with(self.osutils,

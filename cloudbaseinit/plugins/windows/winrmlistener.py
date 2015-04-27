@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Cloudbase Solutions Srl
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -18,10 +16,11 @@ from oslo.config import cfg
 
 from cloudbaseinit.openstack.common import log as logging
 from cloudbaseinit.osutils import factory as osutils_factory
-from cloudbaseinit.plugins import base
+from cloudbaseinit.plugins.common import base
 from cloudbaseinit.utils.windows import security
 from cloudbaseinit.utils.windows import winrmconfig
 from cloudbaseinit.utils.windows import x509
+
 
 LOG = logging.getLogger(__name__)
 
