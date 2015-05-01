@@ -19,7 +19,7 @@ class FreeBSDUtils(base.BaseOSUtils):
 
     def create_user(self, username, password, invite_group=None, password_expires=False):
         """
-        param invite_group: it must be a list of string.
+        :param invite_group: it must be a list of string.
         """
         home_dir = '/home/' + username
         user_shell = '/bin/tcsh'
@@ -69,7 +69,7 @@ class FreeBSDUtils(base.BaseOSUtils):
                                   broadcast, gateway, dnsdomain,
                                   dnsnameservers):
         """
-        param dnsnameservers: must be a list, it can contain 3 elements at most.
+        :param dnsnameservers: must be a list, it can contain 3 elements at most.
         """
         if_list = self.get_network_adapters()
         assert adapter_name in if_list, 'Network interface: ' + adapter_name + ' not found.'
@@ -137,7 +137,7 @@ class FreeBSDUtils(base.BaseOSUtils):
 
     def set_timezone(self, timezone, zoneinfo_dir='/usr/share/zoneinfo'):
         """
-        param timezone: The zoneinfo_file path under /usr/share/zoneinfo.
+        :param timezone: The zoneinfo_file path under /usr/share/zoneinfo.
                         e.g: Asia/Taipei
                         Note that this parameter is case-sensitive,
                         because it's the real path under filesystem.
@@ -160,7 +160,7 @@ class FreeBSDUtils(base.BaseOSUtils):
 
     def _add_rc_conf(self, options):
         """ For appending new options to /etc/rc.conf
-        param options: an dictionary that contain {'option name': 'value'}
+        :param options: an dictionary that contain {'option name': 'value'}
             e.g. {'hostname': 'example',
                    'sshd_enable': 'YES'}
         """

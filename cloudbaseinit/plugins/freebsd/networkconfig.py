@@ -38,14 +38,14 @@ CONF.register_opts(opts)
 
 class NetworkConfigPlugin(base.BasePlugin):
     def execute(self, service, shared_data):
-        network_config = service.get_network_config()
-        if not network_config:
+        network_details = service.get_network_details()
+        if not network_details:
+            return (plugin_base.PLUGIN_EXECUTION_DONE, False)
+
+        if 'content_path' not in network_details:
             return (base.PLUGIN_EXECUTION_DONE, False)
 
-        if 'content_path' not in network_config:
-            return (base.PLUGIN_EXECUTION_DONE, False)
-
-        content_path = network_config['content_path']
+        content_path = network_details['content_path']
         content_name = content_path.rsplit('/', 1)[-1]
         debian_network_conf = service.get_content(content_name)
 
@@ -61,7 +61,7 @@ class NetworkConfigPlugin(base.BasePlugin):
                       debian_network_conf)
         if not m:
             raise exception.CloudbaseInitException(
-                "network_config format not recognized")
+                "network_details format not recognized")
 
         address = m.group('address')
         netmask = m.group('netmask')
