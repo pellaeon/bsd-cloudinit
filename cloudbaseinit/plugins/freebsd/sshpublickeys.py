@@ -43,16 +43,20 @@ class SetUserSSHPublicKeysPlugin(base.BasePlugin):
         if not user_home:
             raise exception.CloudbaseInitException("User home directory not found!")
 
-        LOG.debug("User home: %s" % user_home)
+        LOG.debug("User home: {}".format(user_home))
 
         user_ssh_dir = os.path.join(user_home, '.ssh')
         if not os.path.exists(user_ssh_dir):
             os.makedirs(user_ssh_dir)
 
         authorized_keys_path = os.path.join(user_ssh_dir, "authorized_keys")
-        LOG.info("Writing SSH public keys in: %s" % authorized_keys_path)
+        LOG.info("Writing SSH public keys in: {}".format(authorized_keys_path))
         with open(authorized_keys_path, 'w') as f:
             for public_key in public_keys:
                 f.write(public_key)
+
+
+        # correct permissions
+        osutils.chown(username, username, user_home)
 
         return (base.PLUGIN_EXECUTION_DONE, False)

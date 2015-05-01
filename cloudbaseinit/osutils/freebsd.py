@@ -35,7 +35,7 @@ class FreeBSDUtils(base.BaseOSUtils):
         pw_cmd = "echo " + password + " | pw useradd -n " + username + " -c '" + user_comment + "' -d '" + home_dir + "' -s /bin/tcsh -h 0 -G " + grouplist
         subprocess.check_call(pw_cmd, shell=True)
         subprocess.check_call("mkdir -p %s" % (home_dir), shell=True)
-        subprocess.check_call("chown -R %s:%s %s" % (username, username, home_dir), shell=True)
+        self.chown(username, username, home_dir)
 
     def set_host_name(self, new_host_name):
         subprocess.check_call(['hostname', new_host_name])
@@ -74,14 +74,14 @@ class FreeBSDUtils(base.BaseOSUtils):
         if_list = self.get_network_adapters()
         assert adapter_name in if_list, 'Network interface: ' + adapter_name + ' not found.'
         assert isinstance(dnsnameservers, list), 'dnsnameservers must be a list.'
-        
+
         if_cmd = 'ifconfig ' + adapter_name + ' inet ' + address + ' netmask ' + netmask + ' broadcast ' + broadcast
         route_cmd = 'route add default ' + gateway
         resolv_conf = ['domain ' + dnsdomain]
         resolv_conf_file = open('/etc/resolv.conf', 'w')
         for i in dnsnameservers:
             resolv_conf.append('nameserver ' + i)
-        
+
         subprocess.check_call(if_cmd, shell=True)
         subprocess.check_call(route_cmd, shell=True)
         self._add_comment(resolv_conf_file);
@@ -89,7 +89,7 @@ class FreeBSDUtils(base.BaseOSUtils):
             resolv_conf_file.write(line + '\n')
         self._add_rc_conf({'ifconfig_' + adapter_name: 'inet ' + address + ' netmask ' + netmask + ' broadcast ' + broadcast,
                            'defaultrouter': gateway})
-        
+
         resolv_conf_file.close()
 
         # should return reboot_required, which is always false.
@@ -98,7 +98,7 @@ class FreeBSDUtils(base.BaseOSUtils):
     def set_dhcp_network_config(self, adapter_name):
         if_list = self.get_network_adapters()
         assert adapter_name in if_list, 'Network interface: ' + adapter_name + ' not found.'
-        
+
         _add_rc_conf({'ifconfig_' + adapter_name: 'DHCP'})
         subprocess.check_call(['dhclient', adapter_name])
 
@@ -172,3 +172,16 @@ class FreeBSDUtils(base.BaseOSUtils):
             rc_conf_file.write(key + '="' + options[key] + '"\n')
 
         rc_conf_file.close()
+
+    def chown(self, user, group=None, path=None):
+        if path is None:
+            return
+
+        subprocess.check_call(
+            'chown -R {user}{group} {path}'.format(
+                user=user,
+                group=':' + group if group else None,
+                path=path,
+            ),
+            shell=True
+        )
