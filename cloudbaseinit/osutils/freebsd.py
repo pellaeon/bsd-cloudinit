@@ -3,6 +3,7 @@ from cloudbaseinit.osutils import base
 from subprocess import CalledProcessError
 import subprocess
 import datetime
+import os
 import os.path
 
 class FreeBSDUtils(base.BaseOSUtils):
@@ -78,7 +79,7 @@ class FreeBSDUtils(base.BaseOSUtils):
         if_cmd = 'ifconfig ' + adapter_name + ' inet ' + address + ' netmask ' + netmask + ' broadcast ' + broadcast
         route_cmd = 'route add default ' + gateway
         resolv_conf = ['domain ' + dnsdomain]
-        resolv_conf_file = open('/etc/resolv.conf', 'w')
+        resolv_conf_file = os.popen('resolvconf -a vtnet0', 'w', 1)
         for i in dnsnameservers:
             resolv_conf.append('nameserver ' + i)
 
