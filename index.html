@@ -6,7 +6,7 @@
     <title>bsd-cloudinit by pellaeon</title>
 
     <link rel="stylesheet" href="stylesheets/styles.css">
-    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <link rel="stylesheet" href="stylesheets/github-light.css">
     <script src="javascripts/scale.fix.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <!--[if lt IE 9]>
@@ -89,7 +89,7 @@
 
 <p>bsd-cloudinit will inject your SSH public key into the instance, just log in with username <code>freebsd</code>.</p>
 
-<p>The root password is <code>fenglisu</code>.</p>
+<p>bsd-cloudinit will set <code>freebsd</code> and <code>root</code> user password to random for security. If for some reason bsd-cloudinit was not executed, root password will not be changed. The original root password for all our prebuilt images are <code>fenglisu</code>.</p>
 
 <h2>
 <a id="build-a-freebsd-vm-image-for-openstack" class="anchor" href="#build-a-freebsd-vm-image-for-openstack" aria-hidden="true"><span class="octicon octicon-link"></span></a>Build a FreeBSD VM image for OpenStack</h2>
@@ -101,7 +101,7 @@
 <h3>
 <a id="install-freebsd-via-virt-manager" class="anchor" href="#install-freebsd-via-virt-manager" aria-hidden="true"><span class="octicon octicon-link"></span></a>Install FreeBSD via virt-manager</h3>
 
-<p>First you'll have to install a normal FreeBSD (only version 10.0 tested) VM via virt-manager or similiar tools.</p>
+<p>First you'll have to install a normal FreeBSD (only version 10.x tested) VM via virt-manager or similiar tools.</p>
 
 <p><strong>When creating the VM, configure its disk and network to use VIRTIO</strong>. Since FreeBSD 9.2 it should be able to detect it correctly.</p>
 
@@ -147,6 +147,14 @@ chmod +x installer.sh
 </code></pre>
 
 <p>Then the image is ready to be deployed! Launch an instance to test it!</p>
+
+<h3>
+<a id="further-configurations" class="anchor" href="#further-configurations" aria-hidden="true"><span class="octicon octicon-link"></span></a>Further configurations</h3>
+
+<p>FreeBSD currently does not support DHCP <code>interface-mtu</code> option (<a href="https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=187094">bug 187094</a>). If your VM internal network uses MTU other than 1500, FreeBSD will ignore the option from the assigning DHCP server. You can work around this by manually setting the interface MTU in <code>/etc/rc.local</code>:</p>
+
+<pre><code>ifconfig vtnet0 mtu 1450
+</code></pre>
 
 <h2>
 <a id="planned-features" class="anchor" href="#planned-features" aria-hidden="true"><span class="octicon octicon-link"></span></a>Planned Features</h2>
@@ -196,7 +204,7 @@ chmod +x installer.sh
 <p><img src="https://www.digitalocean.com/assets/images/logos-badges/png/DO_Logo_Vertical_Blue-75e0d68b.png" alt="DigitalOcean"></p>
       </section>
       <footer>
-        <p><small>Hosted on <a href="http://pages.github.com">GitHub Pages</a> using the Dinky theme</small></p>
+        <p><small>Hosted on <a href="https://pages.github.com">GitHub Pages</a> using the Dinky theme</small></p>
       </footer>
     </div>
     <!--[if !IE]><script>fixScale(document);</script><![endif]-->
