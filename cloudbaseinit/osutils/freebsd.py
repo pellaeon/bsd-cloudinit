@@ -12,8 +12,11 @@ class FreeBSDUtils(base.BaseOSUtils):
             raise OSError('Reboot failed')
 
     def user_exists(self, username):
+        '''
+        :return: bool
+        '''
         try:
-            subprocess.check_output(["id", username])
+            subprocess.check_output(['id', username])
         except CalledProcessError:
             return False
         return True

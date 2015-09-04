@@ -20,3 +20,7 @@ class TestFreeBSDUtils():
     def test_reboot(self, system):
         with raises(OSError):
             self.bsd.reboot()
+
+    def test_user_exists(self):
+        assert not self.bsd.user_exists('stranger')
+        assert self.bsd.user_exists('root')
