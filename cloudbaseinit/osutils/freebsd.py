@@ -2,8 +2,13 @@ import datetime
 import subprocess
 import os
 
-from subprocess import CalledProcessError
+from cloudbaseinit.openstack.common import log as logging
 from cloudbaseinit.osutils import base
+from cloudbaseinit.utils.helper import isiterable
+from subprocess import CalledProcessError
+
+
+log = logging.getLogger(__name__)
 
 
 class FreeBSDUtils(base.BaseOSUtils):
@@ -21,25 +26,34 @@ class FreeBSDUtils(base.BaseOSUtils):
             return False
         return True
 
-    def create_user(self, username, password, invite_group=None, password_expires=False):
-        """
-        :param invite_group: it must be a list of string.
-        """
-        home_dir = '/home/' + username
+    def create_user(self, username, password, invite_group=None,
+                    password_expires=False):
+        '''
+        :param invite_group: a sequence of strings
+        :param password_expires: currently unfunctional
+        '''
+        home_dir = '/home/{}'.format(username)
         user_shell = '/bin/tcsh'
-        user_comment = 'Created by bsdcloud-init'
-        grouplist = ''
+        user_comment = 'Created by bsd-cloudinit'
+        invite_group = [] if invite_group is None else invite_group
 
-        assert not invite_group or isinstance(invite_group, list), "param invite_group must be a list."
-        assert invite_group, "invite_group cannot be empty."
-        for i in invite_group:
-            grouplist += i+','
-        grouplist = grouplist[:-1]
+        if not isiterable(invite_group, exclude=str):
+            raise TypeError('invite_group')
+        grouplist = ','.join(invite_group)
 
-        pw_cmd = "echo " + password + " | pw useradd -n " + username + " -c '" + user_comment + "' -d '" + home_dir + "' -s /bin/tcsh -h 0 -G " + grouplist
+        pw_cmd = ("echo {password} | pw useradd -n {username} "
+                  "-c '{user_comment}' -d '{home_dir}' "
+                  "-s {user_shell} -h 0 {grouplist}").format(
+                      password=password,
+                      username=username,
+                      user_comment=user_comment,
+                      home_dir=home_dir,
+                      user_shell=user_shell,
+                      grouplist='-G {}'.format(grouplist) if grouplist else ''
+                      )
         subprocess.check_call(pw_cmd, shell=True)
-        subprocess.check_call("mkdir -p %s" % (home_dir), shell=True)
-        self.chown(username, username, home_dir)
+        subprocess.check_call('mkdir -p {}'.format(home_dir), shell=True)
+        self.chown(user=username, group=username, path=home_dir)
 
     def set_host_name(self, new_host_name):
         subprocess.check_call(['hostname', new_host_name])
