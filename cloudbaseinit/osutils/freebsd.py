@@ -1,15 +1,15 @@
-from cloudbaseinit.osutils import base
+import datetime
+import subprocess
+import os
 
 from subprocess import CalledProcessError
-import subprocess
-import datetime
-import os
-import os.path
+from cloudbaseinit.osutils import base
+
 
 class FreeBSDUtils(base.BaseOSUtils):
     def reboot(self):
-        if ( os.system('reboot') != 0 ):
-            raise Exception('Reboot failed')
+        if os.system('reboot') != 0:
+            raise OSError('Reboot failed')
 
     def user_exists(self, username):
         try:
