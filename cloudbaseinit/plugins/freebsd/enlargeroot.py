@@ -25,6 +25,7 @@ class EnlargeRoot(base.BasePlugin):
         filesystem = match.group('fs')
 
         self._call_shell('gpart recover ' + rootdisk)
+        current_debugflags = self._call_shell_output('sysctl -n kern.geom.debugflags')
         self._call_shell('sysctl kern.geom.debugflags=16')
         self._call_shell('gpart resize -i ' + partition + ' ' + rootdisk)
 
@@ -33,4 +34,5 @@ class EnlargeRoot(base.BasePlugin):
         elif filesystem == 'zfs':
             self._call_shell('zpool set autoexpand=on zroot')
             self._call_shell('zpool online -e zroot ' + rootdisk + 'p' + partition)
+        self._call_shell('sysctl kern.geom.debugflags=' + current_debugflags)
         return (base.PLUGIN_EXECUTION_DONE, False)
